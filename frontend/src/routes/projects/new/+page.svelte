@@ -692,14 +692,22 @@
 				'- Run as a non-root user when the framework and filesystem requirements allow it.'
 			]
 			: [
-				'- Create or repair a root-level compose.yml. Every build context and Dockerfile path must resolve from the repository.',
+				'- Create or repair a root-level compose.yml that includes at least one **buildable application service** (with a `build` context and Dockerfile) serving HTTP. A compose file containing only infrastructure services (database, cache, broker) without an app is incomplete and will fail deployment.',
 				mainService.trim()
-					? `- The MyPaas public service is \`${mainService.trim()}\`. Keep that service name and make it the HTTP entrypoint.`
-					: '- Choose one clear HTTP service as the public service and report its service name for the MyPaas Main service field.',
+					? `- The MyPaas public service is \`${mainService.trim()}\`. Keep that service name and make it the HTTP entrypoint. It must have a \`build\` section or a valid \`image\` reference.`
+					: '- Choose one clear HTTP service as the public service and report its service name for the MyPaas Main service field. This service must have a `build` section or a valid `image` reference.',
 				portRequirement,
-				'- Prefer expose/container ports over fixed host port bindings. MyPaas supplies the host binding and Caddy route for the selected public service.',
-				'- Internal services must communicate by Compose service name, not localhost. Use named volumes for persistent data and healthchecks where they improve startup ordering.',
-				'- Do not use container_name, network_mode: host, privileged containers, or a /var/run/docker.sock mount. Avoid external networks unless the MyPaas host is explicitly prepared for them.'
+				'- The public service must listen on `0.0.0.0` (not `127.0.0.1` or `localhost`) inside the container. Prefer `expose` and container ports over fixed host port bindings — MyPaas supplies the host binding and Caddy route automatically.',
+				'- Internal services (databases, caches, brokers) must communicate by **Compose service name**, not `localhost`. For example, use `db:3306` instead of `localhost:3306` in connection strings and environment variables.',
+				'- Declare all named volumes in the **top-level `volumes:` section**. For example, if a service uses `db_data:/var/lib/mysql`, there must be a `volumes: { db_data: }` block at the root of the compose file.',
+				'- Add healthchecks to infrastructure services. Use generous timeouts for databases that need first-time initialization:',
+				'  - MySQL/MariaDB: `start_period: 60s`, `interval: 15s`, `timeout: 10s`, `retries: 10`.',
+				'  - PostgreSQL: `start_period: 30s`, `interval: 10s`, `timeout: 5s`, `retries: 10`.',
+				'  - Redis/Valkey: `start_period: 5s`, `interval: 5s`, `timeout: 3s`, `retries: 5`.',
+				'  - The app service should also have a healthcheck (e.g. `curl -f http://localhost:PORT/health || exit 1`).',
+				'- Use `depends_on` with `condition: service_healthy` so the app service waits for its dependencies to be ready before starting. Example: `depends_on: { db: { condition: service_healthy } }`.',
+				'- Do not use `container_name`, `network_mode: host`, `privileged`, or mount `/var/run/docker.sock`. Avoid `external` networks unless the MyPaas host is explicitly prepared for them.',
+				'- Move hardcoded credentials (DB passwords, secrets) from compose.yml to environment variables loaded via `.env`. Create `.env.example` with safe placeholders.'
 			];
 
 		return [
