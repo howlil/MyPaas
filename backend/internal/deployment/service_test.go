@@ -135,7 +135,7 @@ func TestGeneratePerServiceEnvFilesSkipsRootWorkspace(t *testing.T) {
 func TestWriteComposeOverrideReplacesExistingPorts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "docker-compose.mypaas.override.yml")
 
-	if err := writeComposeOverride(path, "app", "127.0.0.1:3001:8080", 512, 0.5, "mypaas-dev", "mypaas/demo-app:abc123"); err != nil {
+	if err := writeComposeOverride(path, "app", "127.0.0.1:3001:8080", 512, 0.5, "mypaas-dev", "mypaas/demo-app:abc123", nil); err != nil {
 		t.Fatalf("writeComposeOverride() error = %v", err)
 	}
 

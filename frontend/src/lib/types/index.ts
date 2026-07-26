@@ -41,6 +41,7 @@ export interface Project {
 	composeOverridePaths: string[];
 	composeProfiles:      string[];
 	composeWorkdir:       string | null;
+	serviceResources:    Record<string, { memoryLimitMb: number; cpuLimit: number }>;
 	createdAt:            string;
 	updatedAt:            string;
 }

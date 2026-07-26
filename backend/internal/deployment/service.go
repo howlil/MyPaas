@@ -3,6 +3,7 @@ package deployment
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -819,7 +820,7 @@ func (s *Service) runComposeFromWorkspace(ctx context.Context, project db.Projec
 		}
 	}()
 
-	if err := writeComposeOverride(layout.OverrideFile, main, s.docker.ComposePortMapping(port, project.AppPort), project.MemoryLimitMb, numericToFloat(project.CpuLimit), s.cfg.ProjectNetwork, overrideImageTag); err != nil {
+	if err := writeComposeOverride(layout.OverrideFile, main, s.docker.ComposePortMapping(port, project.AppPort), project.MemoryLimitMb, numericToFloat(project.CpuLimit), s.cfg.ProjectNetwork, overrideImageTag, project.ServiceResources); err != nil {
 		return err
 	}
 	if err := s.docker.WriteSanitizedComposeConfigMulti(ctx, layout.WorkDir, layout.EnvFile, layout.UserFiles, layout.SanitizedFile); err != nil {
@@ -1017,7 +1018,7 @@ func (s *Service) switchComposeRelease(ctx context.Context, project db.Project, 
 		}
 	}()
 
-	if err := writeComposeOverride(layout.OverrideFile, main, s.docker.ComposePortMapping(port, project.AppPort), project.MemoryLimitMb, numericToFloat(project.CpuLimit), s.cfg.ProjectNetwork, overrideImageTag); err != nil {
+	if err := writeComposeOverride(layout.OverrideFile, main, s.docker.ComposePortMapping(port, project.AppPort), project.MemoryLimitMb, numericToFloat(project.CpuLimit), s.cfg.ProjectNetwork, overrideImageTag, project.ServiceResources); err != nil {
 		return err
 	}
 	if err := s.docker.WriteSanitizedComposeConfigMulti(ctx, layout.WorkDir, layout.EnvFile, layout.UserFiles, layout.SanitizedFile); err != nil {
@@ -1272,7 +1273,7 @@ func generatePerServiceEnvFiles(workspace string, envs map[string]string, log fu
 	return nil
 }
 
-func writeComposeOverride(path, service, portMapping string, memoryMB int32, cpuLimit float64, projectNetwork, imageTag string) error {
+func writeComposeOverride(path, service, portMapping string, memoryMB int32, cpuLimit float64, projectNetwork, imageTag string, serviceResources json.RawMessage) error {
 	if memoryMB <= 0 {
 		memoryMB = 512
 	}
@@ -1304,6 +1305,31 @@ func writeComposeOverride(path, service, portMapping string, memoryMB int32, cpu
 	}
 	b.WriteString(`    restart: unless-stopped
 `)
+	// Add custom service resources if defined
+	if len(serviceResources) > 0 && string(serviceResources) != "{}" {
+		var resources map[string]struct {
+			MemoryLimitMb int32   `json:"memoryLimitMb"`
+			CpuLimit      float64 `json:"cpuLimit"`
+		}
+		if err := json.Unmarshal(serviceResources, &resources); err == nil {
+			for svcName, res := range resources {
+				if svcName == service {
+					continue // Main service already handled
+				}
+				if res.MemoryLimitMb <= 0 {
+					res.MemoryLimitMb = 256 // default for non-main
+				}
+				if res.CpuLimit <= 0 {
+					res.CpuLimit = 0.25 // default for non-main
+				}
+				b.WriteString(fmt.Sprintf(`  %q:
+    mem_limit: %dm
+    cpus: %.2f
+`, svcName, res.MemoryLimitMb, res.CpuLimit))
+			}
+		}
+	}
+
 	if projectNetwork != "" {
 		b.WriteString(fmt.Sprintf(`
 networks:
@@ -1312,6 +1338,7 @@ networks:
     name: %q
 `, projectNetwork))
 	}
+
 	return os.WriteFile(path, []byte(b.String()), 0600)
 }
 

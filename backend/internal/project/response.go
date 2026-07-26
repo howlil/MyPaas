@@ -1,6 +1,7 @@
 package project
 
 import (
+	"encoding/json"
 	"math"
 	"math/big"
 	"time"
@@ -34,6 +35,7 @@ type Response struct {
 	ComposeOverridePaths []string `json:"composeOverridePaths"`
 	ComposeProfiles      []string `json:"composeProfiles"`
 	ComposeWorkdir       *string  `json:"composeWorkdir"`
+	ServiceResources     json.RawMessage `json:"serviceResources"`
 	CreatedAt            string   `json:"createdAt"`
 	UpdatedAt            string   `json:"updatedAt"`
 }
@@ -84,6 +86,7 @@ func ResponseFromDB(project db.Project) Response {
 		ComposeOverridePaths: project.ComposeOverridePaths,
 		ComposeProfiles:      project.ComposeProfiles,
 		ComposeWorkdir:       project.ComposeWorkdir,
+		ServiceResources:     project.ServiceResources,
 		CreatedAt:          formatTimestamp(project.CreatedAt.Time, project.CreatedAt.Valid),
 		UpdatedAt:          formatTimestamp(project.UpdatedAt.Time, project.UpdatedAt.Valid),
 	}
@@ -92,6 +95,9 @@ func ResponseFromDB(project db.Project) Response {
 	}
 	if resp.ComposeProfiles == nil {
 		resp.ComposeProfiles = []string{}
+	}
+	if resp.ServiceResources == nil {
+		resp.ServiceResources = json.RawMessage("{}")
 	}
 	return resp
 }

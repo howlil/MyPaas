@@ -29,6 +29,7 @@
 	let composeOverridePaths = '';
 	let composeProfiles      = '';
 	let composeWorkdir       = '';
+	let serviceResourcesStr  = '{}';
 	let deleteInput = '';
 	let showWebhookSecret = false;
 	let savingSettings = false;
@@ -57,6 +58,7 @@
 	                 (project.deployMode === 'compose' && composeWorkdir !== (project.composeWorkdir || '')) ||
 	                 (project.deployMode === 'compose' && composeOverridePaths !== (project.composeOverridePaths || []).join(', ')) ||
 	                 (project.deployMode === 'compose' && composeProfiles !== (project.composeProfiles || []).join(', ')) ||
+	                 serviceResourcesStr !== JSON.stringify(project.serviceResources || {}) ||
 	                 resourceProfile !== project.resourceProfile ||
 	                 memoryMb !== project.memoryLimitMb || cpuLimit !== project.cpuLimit);
 	$: changedProjectHost = projectHost(name || 'your-app', $page.url.hostname);
@@ -91,6 +93,7 @@
 			composeOverridePaths = (project.composeOverridePaths ?? []).join(', ');
 			composeProfiles = (project.composeProfiles ?? []).join(', ');
 			composeWorkdir = project.composeWorkdir ?? '';
+			serviceResourcesStr = JSON.stringify(project.serviceResources || {}, null, 2);
 			if (project.deployMode === 'compose') {
 				await loadComposeResources(project.id);
 			}
@@ -130,13 +133,22 @@
 		if (!project || savingSettings) return;
 		savingSettings = true;
 		try {
+			let parsedResources = {};
+			try {
+				parsedResources = JSON.parse(serviceResourcesStr || '{}');
+			} catch (e) {
+				toast.error('Invalid JSON in service resources');
+				savingSettings = false;
+				return;
+			}
 			const payload: Record<string, unknown> = {
 				name,
 				branch,
 				resourceProfile,
 				appPort: Number(appPort),
 				memoryLimitMb: Number(memoryMb),
-				cpuLimit: Number(cpuLimit)
+				cpuLimit: Number(cpuLimit),
+				serviceResources: parsedResources
 			};
 			if (project.deployMode === 'compose') {
 				payload.mainService = mainService.trim() || null;
@@ -379,6 +391,22 @@
 							{/each}
 						</select>
 					</div>
+				</div>
+
+				<div class="border-t border-gray-100 px-5 py-4 dark:border-gray-800">
+					<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="service_resources">
+						Other Services Limits (JSON)
+					</label>
+					<textarea
+						id="service_resources"
+						bind:value={serviceResourcesStr}
+						rows="4"
+						class="field w-full font-mono text-sm"
+						placeholder='&#123;&#10;  "db": &#123;&#10;    "memoryLimitMb": 512,&#10;    "cpuLimit": 0.5&#10;  &#125;&#10;&#125;'
+					></textarea>
+					<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+						Set memory and CPU limits for non-main services. Key is service name.
+					</p>
 				</div>
 				{#if nameChanged}
 					<div class="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/70 px-5 py-3 dark:border-gray-800 dark:bg-gray-900/70">

@@ -62,6 +62,7 @@ type CreateInput struct {
 	ComposeOverridePaths []string
 	ComposeProfiles      []string
 	ComposeWorkdir       *string
+	ServiceResources     json.RawMessage
 }
 
 type UpdateInput struct {
@@ -77,6 +78,7 @@ type UpdateInput struct {
 	ComposeOverridePaths []string
 	ComposeProfiles      []string
 	ComposeWorkdir       *string
+	ServiceResources     json.RawMessage
 }
 
 type DetectInput struct {
@@ -384,6 +386,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, er
 		ComposeOverridePaths: normalizeStringSlice(input.ComposeOverridePaths),
 		ComposeProfiles:      normalizeStringSlice(input.ComposeProfiles),
 		ComposeWorkdir:       input.ComposeWorkdir,
+		ServiceResources:     input.ServiceResources,
 	})
 	if err != nil {
 		if isProjectUniqueViolation(err) {
@@ -501,6 +504,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 		ComposeOverridePaths: composeOverridePaths,
 		ComposeProfiles:      composeProfiles,
 		ComposeWorkdir:       composeWorkdir,
+		ServiceResources:     input.ServiceResources,
 	}); err != nil {
 		if isProjectUniqueViolation(err) {
 			return db.Project{}, errs.ErrProjectNameTaken

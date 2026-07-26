@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,31 +31,34 @@ const createProject = `-- name: CreateProject :one
 INSERT INTO projects (
     user_id, name, repo_url, branch, subdomain, deploy_mode,
     resource_profile, main_service, app_port, webhook_secret, memory_limit_mb, cpu_limit,
-    compose_file_path, compose_override_paths, compose_profiles, compose_workdir
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+    service_resources
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
           app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
           status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-          compose_file_path, compose_override_paths, compose_profiles, compose_workdir
+          compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+          service_resources
 `
 
 type CreateProjectParams struct {
-	UserID               uuid.UUID      `json:"user_id"`
-	Name                 string         `json:"name"`
-	RepoUrl              string         `json:"repo_url"`
-	Branch               string         `json:"branch"`
-	Subdomain            string         `json:"subdomain"`
-	DeployMode           string         `json:"deploy_mode"`
-	ResourceProfile      string         `json:"resource_profile"`
-	MainService          *string        `json:"main_service"`
-	AppPort              int32          `json:"app_port"`
-	WebhookSecret        string         `json:"webhook_secret"`
-	MemoryLimitMb        int32          `json:"memory_limit_mb"`
-	CpuLimit             pgtype.Numeric `json:"cpu_limit"`
-	ComposeFilePath      *string        `json:"compose_file_path"`
-	ComposeOverridePaths []string       `json:"compose_override_paths"`
-	ComposeProfiles      []string       `json:"compose_profiles"`
-	ComposeWorkdir       *string        `json:"compose_workdir"`
+	UserID               uuid.UUID       `json:"user_id"`
+	Name                 string          `json:"name"`
+	RepoUrl              string          `json:"repo_url"`
+	Branch               string          `json:"branch"`
+	Subdomain            string          `json:"subdomain"`
+	DeployMode           string          `json:"deploy_mode"`
+	ResourceProfile      string          `json:"resource_profile"`
+	MainService          *string         `json:"main_service"`
+	AppPort              int32           `json:"app_port"`
+	WebhookSecret        string          `json:"webhook_secret"`
+	MemoryLimitMb        int32           `json:"memory_limit_mb"`
+	CpuLimit             pgtype.Numeric  `json:"cpu_limit"`
+	ComposeFilePath      *string         `json:"compose_file_path"`
+	ComposeOverridePaths []string        `json:"compose_override_paths"`
+	ComposeProfiles      []string        `json:"compose_profiles"`
+	ComposeWorkdir       *string         `json:"compose_workdir"`
+	ServiceResources     json.RawMessage `json:"service_resources"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -75,6 +79,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.ComposeOverridePaths,
 		arg.ComposeProfiles,
 		arg.ComposeWorkdir,
+		arg.ServiceResources,
 	)
 	var i Project
 	err := row.Scan(
@@ -101,6 +106,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.ComposeOverridePaths,
 		&i.ComposeProfiles,
 		&i.ComposeWorkdir,
+		&i.ServiceResources,
 	)
 	return i, err
 }
@@ -109,7 +115,8 @@ const getProjectByID = `-- name: GetProjectByID :one
 SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-       compose_file_path, compose_override_paths, compose_profiles, compose_workdir
+       compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+       service_resources
 FROM projects
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -141,6 +148,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 		&i.ComposeOverridePaths,
 		&i.ComposeProfiles,
 		&i.ComposeWorkdir,
+		&i.ServiceResources,
 	)
 	return i, err
 }
@@ -149,7 +157,8 @@ const getProjectByName = `-- name: GetProjectByName :one
 SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-       compose_file_path, compose_override_paths, compose_profiles, compose_workdir
+       compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+       service_resources
 FROM projects
 WHERE name = $1 AND deleted_at IS NULL
 `
@@ -181,6 +190,7 @@ func (q *Queries) GetProjectByName(ctx context.Context, name string) (Project, e
 		&i.ComposeOverridePaths,
 		&i.ComposeProfiles,
 		&i.ComposeWorkdir,
+		&i.ServiceResources,
 	)
 	return i, err
 }
@@ -237,7 +247,8 @@ const listProjectsByUser = `-- name: ListProjectsByUser :many
 SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-       compose_file_path, compose_override_paths, compose_profiles, compose_workdir
+       compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+       service_resources
 FROM projects
 WHERE user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -276,6 +287,7 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID uuid.UUID) ([]P
 			&i.ComposeOverridePaths,
 			&i.ComposeProfiles,
 			&i.ComposeWorkdir,
+			&i.ServiceResources,
 		); err != nil {
 			return nil, err
 		}
@@ -291,7 +303,8 @@ const listRoutableProjects = `-- name: ListRoutableProjects :many
 SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-       compose_file_path, compose_override_paths, compose_profiles, compose_workdir
+       compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+       service_resources
 FROM projects
 WHERE status = 'running'
   AND deleted_at IS NULL
@@ -331,6 +344,7 @@ func (q *Queries) ListRoutableProjects(ctx context.Context) ([]Project, error) {
 			&i.ComposeOverridePaths,
 			&i.ComposeProfiles,
 			&i.ComposeWorkdir,
+			&i.ServiceResources,
 		); err != nil {
 			return nil, err
 		}
@@ -420,24 +434,26 @@ SET name                 = $2,
     compose_override_paths = $11,
     compose_profiles     = $12,
     compose_workdir      = $13,
+    service_resources    = $14,
     updated_at           = NOW()
 WHERE id = $1 AND deleted_at IS NULL
 `
 
 type UpdateProjectParams struct {
-	ID                   uuid.UUID      `json:"id"`
-	Name                 string         `json:"name"`
-	Subdomain            string         `json:"subdomain"`
-	Branch               string         `json:"branch"`
-	ResourceProfile      string         `json:"resource_profile"`
-	AppPort              int32          `json:"app_port"`
-	MemoryLimitMb        int32          `json:"memory_limit_mb"`
-	CpuLimit             pgtype.Numeric `json:"cpu_limit"`
-	MainService          *string        `json:"main_service"`
-	ComposeFilePath      *string        `json:"compose_file_path"`
-	ComposeOverridePaths []string       `json:"compose_override_paths"`
-	ComposeProfiles      []string       `json:"compose_profiles"`
-	ComposeWorkdir       *string        `json:"compose_workdir"`
+	ID                   uuid.UUID       `json:"id"`
+	Name                 string          `json:"name"`
+	Subdomain            string          `json:"subdomain"`
+	Branch               string          `json:"branch"`
+	ResourceProfile      string          `json:"resource_profile"`
+	AppPort              int32           `json:"app_port"`
+	MemoryLimitMb        int32           `json:"memory_limit_mb"`
+	CpuLimit             pgtype.Numeric  `json:"cpu_limit"`
+	MainService          *string         `json:"main_service"`
+	ComposeFilePath      *string         `json:"compose_file_path"`
+	ComposeOverridePaths []string        `json:"compose_override_paths"`
+	ComposeProfiles      []string        `json:"compose_profiles"`
+	ComposeWorkdir       *string         `json:"compose_workdir"`
+	ServiceResources     json.RawMessage `json:"service_resources"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) error {
@@ -455,6 +471,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) er
 		arg.ComposeOverridePaths,
 		arg.ComposeProfiles,
 		arg.ComposeWorkdir,
+		arg.ServiceResources,
 	)
 	return err
 }

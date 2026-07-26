@@ -2,7 +2,8 @@
 SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-       compose_file_path, compose_override_paths, compose_profiles, compose_workdir
+       compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+       service_resources
 FROM projects
 WHERE id = $1 AND deleted_at IS NULL;
 
@@ -10,7 +11,8 @@ WHERE id = $1 AND deleted_at IS NULL;
 SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-       compose_file_path, compose_override_paths, compose_profiles, compose_workdir
+       compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+       service_resources
 FROM projects
 WHERE name = $1 AND deleted_at IS NULL;
 
@@ -18,7 +20,8 @@ WHERE name = $1 AND deleted_at IS NULL;
 SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-       compose_file_path, compose_override_paths, compose_profiles, compose_workdir
+       compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+       service_resources
 FROM projects
 WHERE user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC;
@@ -27,7 +30,8 @@ ORDER BY created_at DESC;
 SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-       compose_file_path, compose_override_paths, compose_profiles, compose_workdir
+       compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+       service_resources
 FROM projects
 WHERE status = 'running'
   AND deleted_at IS NULL
@@ -43,12 +47,14 @@ WHERE user_id = $1
 INSERT INTO projects (
     user_id, name, repo_url, branch, subdomain, deploy_mode,
     resource_profile, main_service, app_port, webhook_secret, memory_limit_mb, cpu_limit,
-    compose_file_path, compose_override_paths, compose_profiles, compose_workdir
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+    service_resources
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 RETURNING id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
           app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
           status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
-          compose_file_path, compose_override_paths, compose_profiles, compose_workdir;
+          compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
+          service_resources;
 
 -- name: UpdateProject :exec
 UPDATE projects
@@ -64,6 +70,7 @@ SET name                 = $2,
     compose_override_paths = $11,
     compose_profiles     = $12,
     compose_workdir      = $13,
+    service_resources    = $14,
     updated_at           = NOW()
 WHERE id = $1 AND deleted_at IS NULL;
 

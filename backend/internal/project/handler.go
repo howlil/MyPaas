@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -221,6 +222,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		ComposeOverridePaths []string `json:"composeOverridePaths"`
 		ComposeProfiles      []string `json:"composeProfiles"`
 		ComposeWorkdir       *string  `json:"composeWorkdir"`
+		ServiceResources     json.RawMessage `json:"serviceResources"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
@@ -243,6 +245,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		ComposeOverridePaths: req.ComposeOverridePaths,
 		ComposeProfiles:      req.ComposeProfiles,
 		ComposeWorkdir:       req.ComposeWorkdir,
+		ServiceResources:     req.ServiceResources,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)

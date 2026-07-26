@@ -5,6 +5,7 @@
 package db
 
 import (
+	"encoding/json"
 	"net/netip"
 
 	"github.com/google/uuid"
@@ -89,6 +90,7 @@ type Project struct {
 	ComposeOverridePaths []string         `json:"compose_override_paths"`
 	ComposeProfiles      []string         `json:"compose_profiles"`
 	ComposeWorkdir       *string          `json:"compose_workdir"`
+	ServiceResources     json.RawMessage  `json:"service_resources"`
 }
 
 type User struct {
