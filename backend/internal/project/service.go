@@ -1183,7 +1183,7 @@ func validateComposeConfigInput(deployMode string, composeFilePath *string, over
 // change shape.
 func normalizeStringSlice(values []string) []string {
 	if len(values) == 0 {
-		return nil
+		return []string{}
 	}
 	out := make([]string, 0, len(values))
 	for _, value := range values {
@@ -1193,7 +1193,7 @@ func normalizeStringSlice(values []string) []string {
 		}
 	}
 	if len(out) == 0 {
-		return nil
+		return []string{}
 	}
 	return out
 }
