@@ -141,6 +141,10 @@ docker exec "$POSTGRES_CONTAINER" pg_restore \
     --no-privileges \
     "/tmp/_system.dump"
 docker exec "$POSTGRES_CONTAINER" rm "/tmp/_system.dump"
+
+info "Resetting project states to 'stopped'..."
+docker exec "$POSTGRES_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -c "UPDATE projects SET status='stopped';"
+
 ok "System database restored"
 
 # ── 8. Restore roles & shared project databases ─────────────────────
