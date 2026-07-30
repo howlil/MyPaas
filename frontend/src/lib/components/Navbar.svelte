@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { ChevronLeft, ChevronRight, ClipboardList, FolderKanban, LogOut, Menu, Moon, Plus, Sun, Users } from '@lucide/svelte';
+	import { ChevronLeft, ChevronRight, ClipboardList, FolderKanban, LogOut, Menu, Moon, Plus, Settings, Sun, Users } from '@lucide/svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import ActionButton from '$components/ActionButton.svelte';
@@ -20,7 +20,8 @@
 		{ href: '/projects', label: 'Projects', icon: FolderKanban },
 		{ href: '/projects/new', label: 'New project', icon: Plus },
 		{ href: '/admin/users', label: 'Users', icon: Users },
-		{ href: '/admin/audit-logs', label: 'Audit', icon: ClipboardList }
+		{ href: '/admin/audit-logs', label: 'Audit', icon: ClipboardList },
+		{ href: '/admin/settings', label: 'Settings', icon: Settings }
 	];
 
 	$: pathname = $page.url.pathname;

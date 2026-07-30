@@ -20,6 +20,15 @@ import type {
 	LogsResponse
 } from '$types';
 
+export interface MigrationStatus {
+	id: string;
+	status: 'preparing' | 'ready' | 'failed' | 'expired';
+	downloadToken?: string;
+	sizeBytes?: number;
+	expiresAt?: string;
+	error?: string;
+}
+
 class ApiError extends Error {
 	constructor(
 		public code: string,
@@ -153,6 +162,13 @@ export const api = {
 		addUser:     (d: unknown):             Promise<User>   => request('/admin/users',      { method: 'POST',   body: JSON.stringify(d) }),
 		removeUser:  (id: string):             Promise<void>   => request(`/admin/users/${id}`, { method: 'DELETE' }),
 		listAuditLogs: (page = 0, pageSize = 50, lookahead = false): Promise<AuditLog[]> =>
-			request(`/admin/audit-logs?limit=${pageSize + (lookahead ? 1 : 0)}&offset=${page * pageSize}`)
+			request(`/admin/audit-logs?limit=${pageSize + (lookahead ? 1 : 0)}&offset=${page * pageSize}`),
+		getSettings: (): Promise<Record<string, number>> => request('/admin/settings'),
+		updateSettings: (d: Record<string, number>): Promise<Record<string, number>> =>
+			request('/admin/settings', { method: 'PUT', body: JSON.stringify(d) }),
+		prepareMigration: (): Promise<MigrationStatus> =>
+			request('/admin/migrate/prepare', { method: 'POST' }),
+		migrationStatus: (id: string): Promise<MigrationStatus> =>
+			request(`/admin/migrate/${id}/status`)
 	}
 };

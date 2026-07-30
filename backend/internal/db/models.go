@@ -59,6 +59,12 @@ type EnvVar struct {
 	UpdatedAt      pgtype.Timestamp `json:"updated_at"`
 }
 
+type PlatformSetting struct {
+	Key       string           `json:"key"`
+	Value     json.RawMessage  `json:"value"`
+	UpdatedAt pgtype.Timestamp `json:"updated_at"`
+}
+
 type PortRegistry struct {
 	Port       int32            `json:"port"`
 	ProjectID  pgtype.UUID      `json:"project_id"`

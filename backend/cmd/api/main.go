@@ -33,9 +33,11 @@ import (
 	"mypaas/internal/deployment"
 	"mypaas/internal/envvar"
 	"mypaas/internal/logger"
+	"mypaas/internal/migration"
 	"mypaas/internal/port"
 	"mypaas/internal/project"
 	"mypaas/internal/quota"
+	"mypaas/internal/settings"
 	"mypaas/internal/sharedpostgres"
 	"mypaas/internal/user"
 	"mypaas/internal/webhook"
@@ -178,6 +180,8 @@ func buildRouter(cfg *config.Config, pool *pgxpool.Pool, tokenService *auth.Toke
 	quotaHandler := quota.NewHandler(quotaService)
 	userHandler := user.NewHandler(queries)
 	webhookHandler := webhook.NewHandler(queries, deploymentService)
+	settingsHandler := settings.NewHandler(queries, cfg)
+	migrationHandler := migration.NewHandler(migration.NewService(cfg))
 
 	r := chi.NewRouter()
 
@@ -188,9 +192,9 @@ func buildRouter(cfg *config.Config, pool *pgxpool.Pool, tokenService *auth.Toke
 	r.Use(timeoutExceptStreams(60 * time.Second))
 
 	r.Get("/metrics", handleMetrics(cfg, processStartedAt))
-	registerRoutes(r, pool, authMiddleware, auditMiddleware, authHandler, projectHandler, deploymentHandler, envHandler, dbStudioHandler, quotaHandler, userHandler, webhookHandler, auditHandler)
+	registerRoutes(r, pool, authMiddleware, auditMiddleware, authHandler, projectHandler, deploymentHandler, envHandler, dbStudioHandler, quotaHandler, userHandler, webhookHandler, auditHandler, settingsHandler, migrationHandler)
 	r.Route("/api", func(r chi.Router) {
-		registerRoutes(r, pool, authMiddleware, auditMiddleware, authHandler, projectHandler, deploymentHandler, envHandler, dbStudioHandler, quotaHandler, userHandler, webhookHandler, auditHandler)
+		registerRoutes(r, pool, authMiddleware, auditMiddleware, authHandler, projectHandler, deploymentHandler, envHandler, dbStudioHandler, quotaHandler, userHandler, webhookHandler, auditHandler, settingsHandler, migrationHandler)
 	})
 
 	return r
@@ -250,6 +254,8 @@ func registerRoutes(
 	userHandler *user.Handler,
 	webhookHandler *webhook.Handler,
 	auditHandler *audit.Handler,
+	settingsHandler *settings.Handler,
+	migrationHandler *migration.Handler,
 ) {
 	r.Get("/health", handleHealth)
 	r.Get("/ready", handleReady(pool))
@@ -317,6 +323,11 @@ func registerRoutes(
 			r.Post("/users", userHandler.Add)
 			r.Delete("/users/{id}", userHandler.Remove)
 			r.Get("/audit-logs", auditHandler.List)
+			r.Get("/settings", settingsHandler.Get)
+			r.Put("/settings", settingsHandler.Update)
+			r.Post("/migrate/prepare", migrationHandler.Prepare)
+			r.Get("/migrate/{id}/status", migrationHandler.Status)
+			r.Get("/migrate/{id}/download", migrationHandler.Download)
 		})
 	})
 }
