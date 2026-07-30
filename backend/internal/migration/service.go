@@ -204,7 +204,11 @@ func (s *Service) runExport(m *Migration) {
 	slog.Info("migration: creating archive")
 	archivePath := filepath.Join(archiveDir, fmt.Sprintf("mypaas-export-%s.tar.gz", m.ID))
 	
-	tarArgs := []string{"czf", archivePath, "-C", workDir, "databases", "dot-env", "manifest.json"}
+	tarArgs := []string{"czf", archivePath, "-C", workDir, "databases"}
+	if _, err := os.Stat(filepath.Join(workDir, "dot-env")); err == nil {
+		tarArgs = append(tarArgs, "-C", workDir, "dot-env")
+	}
+	tarArgs = append(tarArgs, "-C", workDir, "manifest.json")
 	
 	persistentDirs := []string{"volumes", "compose", "static"}
 	for _, dir := range persistentDirs {
