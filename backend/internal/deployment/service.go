@@ -74,10 +74,9 @@ func (s *Service) ReconcileMissingContainers(ctx context.Context) error {
 	}
 	for _, p := range projects {
 		name := fmt.Sprintf("mypaas-p-%s", p.ID.String()[:8])
-		_, err := s.docker.ContainerInspect(ctx, name)
-		if err != nil {
-			// Container doesn't exist (or error), trigger a deployment to rebuild it
-			slog.Info("reconciler: container missing for running project, triggering deployment", "project", p.Name, "id", p.ID)
+		if !s.docker.StackExists(ctx, name, p.DeployMode) {
+			// Container/stack doesn't exist, trigger a deployment to rebuild it
+			slog.Info("reconciler: stack missing for running project, triggering deployment", "project", p.Name, "id", p.ID, "mode", p.DeployMode)
 			// Trigger as an automated system action (no user ID)
 			deployment, err := s.queries.CreateDeployment(ctx, db.CreateDeploymentParams{
 				ProjectID:   p.ID,

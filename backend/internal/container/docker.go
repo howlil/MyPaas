@@ -110,6 +110,15 @@ func (d *DockerCLI) ComposePortMapping(hostPort, containerPort int32) string {
 	return fmt.Sprintf("%s:%d:%d", d.bindHost, hostPort, containerPort)
 }
 
+func (d *DockerCLI) StackExists(ctx context.Context, name, mode string) bool {
+	if mode == "compose" {
+		res, err := d.ComposeResources(ctx, name)
+		return err == nil && res.Containers > 0
+	}
+	cmd := exec.CommandContext(ctx, "docker", "inspect", "--type=container", name)
+	return cmd.Run() == nil
+}
+
 func (d *DockerCLI) Stop(ctx context.Context, name string) error {
 	return runIgnoreNotFound(ctx, "docker", "stop", "--timeout", "30", name)
 }
