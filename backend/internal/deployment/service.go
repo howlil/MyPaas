@@ -64,6 +64,35 @@ func NewService(cfg *config.Config, queries *db.Queries, envs *envvar.Service, p
 	}
 }
 
+// ReconcileMissingContainers checks all 'running' projects and triggers a manual deployment
+// if their Docker container/compose stack does not exist. This provides auto-recovery after
+// a VM migration or host reboot.
+func (s *Service) ReconcileMissingContainers(ctx context.Context) error {
+	projects, err := s.queries.ListRoutableProjects(ctx)
+	if err != nil {
+		return err
+	}
+	for _, p := range projects {
+		name := fmt.Sprintf("mypaas-p-%s", p.ID.String()[:8])
+		_, err := s.docker.ContainerInspect(ctx, name)
+		if err != nil {
+			// Container doesn't exist (or error), trigger a deployment to rebuild it
+			slog.Info("reconciler: container missing for running project, triggering deployment", "project", p.Name, "id", p.ID)
+			// Trigger as an automated system action (no user ID)
+			deployment, err := s.queries.CreateDeployment(ctx, db.CreateDeploymentParams{
+				ProjectID:   p.ID,
+				TriggeredBy: "auto-recovery",
+			})
+			if err != nil {
+				slog.Error("reconciler: failed to create deployment", "project", p.Name, "error", err)
+				continue
+			}
+			go s.runDeployment(p.ID, deployment.ID)
+		}
+	}
+	return nil
+}
+
 func (s *Service) TriggerDockerfile(ctx context.Context, projectID, userID uuid.UUID) (db.Deployment, error) {
 	project, err := s.queries.GetProjectByID(ctx, projectID)
 	if err == pgx.ErrNoRows {

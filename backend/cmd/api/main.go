@@ -101,6 +101,11 @@ func run() error {
 		container.NewDockerCLI(cfg.DockerBindHost, cfg.ProjectNetwork),
 	)
 
+	// Recover missing containers (e.g. after VM migration or host reboot)
+	if err := routeReconciler.ReconcileMissingContainers(context.Background()); err != nil {
+		slog.Warn("failed to reconcile missing containers", "error", err)
+	}
+
 	appCtx, stopBackground := context.WithCancel(context.Background())
 	defer stopBackground()
 	backgroundDone := startBackgroundJobs(appCtx, cfg, routeReconciler)
