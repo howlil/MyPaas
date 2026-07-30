@@ -389,7 +389,7 @@ main() {
     if ! command_exists curl; then
       sudo_cmd apt-get update && sudo_cmd apt-get install -y curl
     fi
-    curl -L "$MIGRATE_URL" -o /tmp/mypaas-export.tar.gz
+    curl -fL "$MIGRATE_URL" -o /tmp/mypaas-export.tar.gz
     
     log "Running import script..."
     bash "$ROOT_DIR/scripts/migrate-import.sh" /tmp/mypaas-export.tar.gz
