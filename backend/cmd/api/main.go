@@ -260,6 +260,7 @@ func registerRoutes(
 	r.Get("/health", handleHealth)
 	r.Get("/ready", handleReady(pool))
 	r.Post("/webhook/{projectId}", webhookHandler.GitHub)
+	r.Get("/admin/migrate/{id}/download", migrationHandler.Download)
 
 	r.Route("/auth", func(r chi.Router) {
 		r.Get("/github/login", authHandler.Login)
@@ -328,7 +329,6 @@ func registerRoutes(
 			r.Put("/settings", settingsHandler.Update)
 			r.Post("/migrate/prepare", migrationHandler.Prepare)
 			r.Get("/migrate/{id}/status", migrationHandler.Status)
-			r.Get("/migrate/{id}/download", migrationHandler.Download)
 		})
 	})
 }
