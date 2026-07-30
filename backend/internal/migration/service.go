@@ -320,7 +320,7 @@ func (s *Service) replaceDBName(databaseURL, newDB string) string {
 
 func (s *Service) copyDotEnv(workDir string) {
 	// Try several common locations relative to the running process.
-	candidates := []string{".env", "../.env", "../../.env", "../../../.env"}
+	candidates := []string{"/mypaas/.env", ".env", "../.env", "../../.env", "../../../.env"}
 	configDir := strings.TrimSpace(os.Getenv("MYPAAS_CONFIG_DIR"))
 	if configDir != "" {
 		candidates = append([]string{filepath.Join(configDir, ".env")}, candidates...)
