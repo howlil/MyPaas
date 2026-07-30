@@ -12,6 +12,20 @@ WIZARD_HOST="${WIZARD_HOST:-127.0.0.1}"
 WIZARD_PORT="${WIZARD_PORT:-8787}"
 WIZARD_PUBLIC_TUNNEL="${WIZARD_PUBLIC_TUNNEL:-true}"
 
+MIGRATE_URL="${MIGRATE_URL:-}"
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --migrate-url)
+      MIGRATE_URL="$2"
+      shift 2
+      ;;
+    *)
+      break
+      ;;
+  esac
+done
+
 cd "$ROOT_DIR"
 
 log() {
@@ -369,6 +383,27 @@ prepare_host() {
 
 main() {
   ensure_dependencies
+
+  if [[ -n "$MIGRATE_URL" ]]; then
+    log "Downloading migration package..."
+    if ! command_exists curl; then
+      sudo_cmd apt-get update && sudo_cmd apt-get install -y curl
+    fi
+    curl -L "$MIGRATE_URL" -o /tmp/mypaas-export.tar.gz
+    
+    log "Running import script..."
+    bash "$ROOT_DIR/scripts/migrate-import.sh" /tmp/mypaas-export.tar.gz
+    
+    log "Migration import complete! Starting MyPaas..."
+    prepare_host
+    local docker_cmd
+    docker_cmd="$(docker_prefix)"
+    DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" COMPOSE_FILE="$COMPOSE_FILE" ENV_FILE="$ENV_FILE" bash "$ROOT_DIR/scripts/deploy-to-vm.sh"
+    
+    log "Migration successfully deployed on new VM!"
+    exit 0
+  fi
+
   write_env_file
   prepare_host
 

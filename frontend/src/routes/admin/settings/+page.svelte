@@ -135,6 +135,9 @@
 	}
 
 	$: downloadUrl = migration?.downloadToken ? `/api/admin/migrate/${migration.id}/download?token=${migration.downloadToken}` : '#';
+	$: migrationCommand = migration && typeof window !== 'undefined'
+		? `git clone https://github.com/nabilrn/MyPaas.git mypaas && cd mypaas && bash scripts/install-vm.sh --migrate-url "${window.location.origin}/api/admin/migrate/${migration.id}/download?token=${migration.downloadToken}"`
+		: '';
 </script>
 
 <svelte:head>
@@ -220,164 +223,33 @@
 						</div>
 						<a
 							href={downloadUrl}
-							class="inline-flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 dark:focus:ring-offset-gray-900"
+							class="inline-flex items-center justify-center gap-2 rounded-md border border-gray-300 bg-transparent px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800 dark:focus:ring-offset-gray-900"
 						>
 							<Download class="h-4 w-4" />
-							Download Package ({formatBytes(migration.sizeBytes)})
+							Download Package (Manual Backup)
 						</a>
 					</div>
 				</div>
 
-				<div>
-					<h3 class="mb-6 text-lg font-medium text-gray-900 dark:text-white">Migration Guide</h3>
-					<div class="space-y-6">
-						<!-- Step 1 -->
-						<div class="relative flex gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-							<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-400">
-								1
-							</div>
-							<div class="flex-1 space-y-2">
-								<h4 class="text-base font-semibold text-gray-900 dark:text-white">Download the package</h4>
-								<p class="text-sm text-gray-600 dark:text-gray-400">Click the download button above to save the backup to your local machine.</p>
-							</div>
-						</div>
-
-						<!-- Step 2 -->
-						<div class="relative flex gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-							<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-400">
-								2
-							</div>
-							<div class="flex-1 space-y-2">
-								<h4 class="text-base font-semibold text-gray-900 dark:text-white">Transfer to new VM</h4>
-								<p class="text-sm text-gray-600 dark:text-gray-400">Copy the downloaded file to your new server's <code>/tmp</code> directory.</p>
-								<div class="group relative mt-2 rounded-md bg-gray-900 p-3 pr-12 text-sm text-gray-300">
-									<code class="block overflow-x-auto whitespace-nowrap font-mono">scp mypaas-export-*.tar.gz user@new-vm:/tmp/</code>
-									<button
-										on:click={() => copyToClipboard('scp mypaas-export-*.tar.gz user@new-vm:/tmp/', 'step2')}
-										class="absolute right-2 top-2 rounded p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white focus:outline-none"
-										aria-label="Copy code"
-									>
-										{#if copiedText === 'step2'}
-											<Check class="h-4 w-4 text-green-400" />
-										{:else}
-											<Copy class="h-4 w-4" />
-										{/if}
-									</button>
-								</div>
-							</div>
-						</div>
-
-						<!-- Step 3 -->
-						<div class="relative flex gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-							<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-400">
-								3
-							</div>
-							<div class="flex-1 space-y-2">
-								<h4 class="text-base font-semibold text-gray-900 dark:text-white">Install prerequisites</h4>
-								<p class="text-sm text-gray-600 dark:text-gray-400">SSH into your new VM and install Docker and Git.</p>
-								<div class="group relative mt-2 rounded-md bg-gray-900 p-3 pr-12 text-sm text-gray-300">
-									<code class="block overflow-x-auto whitespace-nowrap font-mono">sudo apt update && sudo apt install -y docker.io git<br/>sudo systemctl enable --now docker</code>
-									<button
-										on:click={() => copyToClipboard('sudo apt update && sudo apt install -y docker.io git\nsudo systemctl enable --now docker', 'step3')}
-										class="absolute right-2 top-2 rounded p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white focus:outline-none"
-										aria-label="Copy code"
-									>
-										{#if copiedText === 'step3'}
-											<Check class="h-4 w-4 text-green-400" />
-										{:else}
-											<Copy class="h-4 w-4" />
-										{/if}
-									</button>
-								</div>
-							</div>
-						</div>
-
-						<!-- Step 4 -->
-						<div class="relative flex gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-							<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-400">
-								4
-							</div>
-							<div class="flex-1 space-y-2">
-								<h4 class="text-base font-semibold text-gray-900 dark:text-white">Clone MyPaas</h4>
-								<p class="text-sm text-gray-600 dark:text-gray-400">Clone the repository on the new VM.</p>
-								<div class="group relative mt-2 rounded-md bg-gray-900 p-3 pr-12 text-sm text-gray-300">
-									<code class="block overflow-x-auto whitespace-nowrap font-mono">git clone https://github.com/your-org/mypaas.git mypaas && cd mypaas</code>
-									<button
-										on:click={() => copyToClipboard('git clone https://github.com/your-org/mypaas.git mypaas && cd mypaas', 'step4')}
-										class="absolute right-2 top-2 rounded p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white focus:outline-none"
-										aria-label="Copy code"
-									>
-										{#if copiedText === 'step4'}
-											<Check class="h-4 w-4 text-green-400" />
-										{:else}
-											<Copy class="h-4 w-4" />
-										{/if}
-									</button>
-								</div>
-							</div>
-						</div>
-
-						<!-- Step 5 -->
-						<div class="relative flex gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-							<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-400">
-								5
-							</div>
-							<div class="flex-1 space-y-2">
-								<h4 class="text-base font-semibold text-gray-900 dark:text-white">Run import</h4>
-								<p class="text-sm text-gray-600 dark:text-gray-400">Execute the migration import script.</p>
-								<div class="group relative mt-2 rounded-md bg-gray-900 p-3 pr-12 text-sm text-gray-300">
-									<code class="block overflow-x-auto whitespace-nowrap font-mono">bash scripts/migrate-import.sh /tmp/mypaas-export-*.tar.gz</code>
-									<button
-										on:click={() => copyToClipboard('bash scripts/migrate-import.sh /tmp/mypaas-export-*.tar.gz', 'step5')}
-										class="absolute right-2 top-2 rounded p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white focus:outline-none"
-										aria-label="Copy code"
-									>
-										{#if copiedText === 'step5'}
-											<Check class="h-4 w-4 text-green-400" />
-										{:else}
-											<Copy class="h-4 w-4" />
-										{/if}
-									</button>
-								</div>
-							</div>
-						</div>
-
-						<!-- Step 6 -->
-						<div class="relative flex gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-							<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-400">
-								6
-							</div>
-							<div class="flex-1 space-y-2">
-								<h4 class="text-base font-semibold text-gray-900 dark:text-white">Redeploy projects</h4>
-								<p class="text-sm text-gray-600 dark:text-gray-400">Trigger a redeploy of all your projects on the new infrastructure.</p>
-								<div class="group relative mt-2 rounded-md bg-gray-900 p-3 pr-12 text-sm text-gray-300">
-									<code class="block overflow-x-auto whitespace-nowrap font-mono">for p in $(docker ps -aq --filter label=mypaas.project); do docker restart $p; done</code>
-									<button
-										on:click={() => copyToClipboard('for p in $(docker ps -aq --filter label=mypaas.project); do docker restart $p; done', 'step6')}
-										class="absolute right-2 top-2 rounded p-1.5 text-gray-400 hover:bg-gray-800 hover:text-white focus:outline-none"
-										aria-label="Copy code"
-									>
-										{#if copiedText === 'step6'}
-											<Check class="h-4 w-4 text-green-400" />
-										{:else}
-											<Copy class="h-4 w-4" />
-										{/if}
-									</button>
-								</div>
-							</div>
-						</div>
-
-						<!-- Step 7 -->
-						<div class="relative flex gap-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-950">
-							<div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-100 font-bold text-brand-700 dark:bg-brand-900/40 dark:text-brand-400">
-								7
-							</div>
-							<div class="flex-1 space-y-2">
-								<h4 class="text-base font-semibold text-gray-900 dark:text-white">Verify</h4>
-								<p class="text-sm text-gray-600 dark:text-gray-400">Update your DNS records to point to the new VM IP, then check your dashboard and verify all project subdomains are accessible.</p>
-							</div>
-						</div>
-
+				<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-950">
+					<h3 class="text-lg font-medium text-gray-900 dark:text-white">One-Step Automated Migration</h3>
+					<p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
+						SSH into your brand new VM and paste this single command. It will install MyPaas, securely download your migration package, restore your database & volumes, and automatically restart your projects.
+					</p>
+					
+					<div class="group relative mt-6 rounded-md bg-gray-900 p-4 pr-12 text-sm text-gray-300">
+						<code class="block overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">{migrationCommand}</code>
+						<button
+							on:click={() => copyToClipboard(migrationCommand, 'automated_cmd')}
+							class="absolute right-3 top-3 rounded p-2 text-gray-400 hover:bg-gray-800 hover:text-white focus:outline-none"
+							aria-label="Copy code"
+						>
+							{#if copiedText === 'automated_cmd'}
+								<Check class="h-5 w-5 text-green-400" />
+							{:else}
+								<Copy class="h-5 w-5" />
+							{/if}
+						</button>
 					</div>
 				</div>
 			</div>
