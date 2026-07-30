@@ -186,7 +186,7 @@ func (s *Service) runExport(m *Migration) {
 	// 4. Copy .env if accessible.
 	s.copyDotEnv(workDir)
 
-	// 5. Write manifest.
+	// 6. Write manifest.
 	hostname, _ := os.Hostname()
 	parsed, _ := url.Parse(s.cfg.DatabaseURL)
 	dbName := strings.TrimPrefix(parsed.Path, "/")
@@ -200,30 +200,23 @@ func (s *Service) runExport(m *Migration) {
 	mfData, _ := json.MarshalIndent(mf, "", "  ")
 	_ = os.WriteFile(filepath.Join(workDir, "manifest.json"), mfData, 0600)
 
-	// 6. Copy persistent directories.
-	persistentDirs := []struct {
-		src  string
-		name string
-	}{
-		{"/var/lib/mypaas/volumes", "volumes"},
-		{"/var/lib/mypaas/compose", "compose"},
-		{"/var/lib/mypaas/static", "static"},
-	}
-	for _, d := range persistentDirs {
-		if info, err := os.Stat(d.src); err == nil && info.IsDir() {
-			slog.Info("migration: copying directory", "src", d.src)
-			dst := filepath.Join(workDir, d.name)
-			if err := copyDir(d.src, dst); err != nil {
-				slog.Warn("migration: failed to copy dir", "src", d.src, "error", err)
-			}
+	// 7. Create tar.gz archive using tar CLI directly to avoid duplicating disk space.
+	slog.Info("migration: creating archive")
+	archivePath := filepath.Join(archiveDir, fmt.Sprintf("mypaas-export-%s.tar.gz", m.ID))
+	
+	tarArgs := []string{"czf", archivePath, "-C", workDir, "databases", "dot-env", "manifest.json"}
+	
+	persistentDirs := []string{"volumes", "compose", "static"}
+	for _, dir := range persistentDirs {
+		fullPath := filepath.Join("/var/lib/mypaas", dir)
+		if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
+			tarArgs = append(tarArgs, "-C", "/var/lib/mypaas", dir)
 		}
 	}
 
-	// 7. Create tar.gz archive.
-	slog.Info("migration: creating archive")
-	archivePath := filepath.Join(archiveDir, fmt.Sprintf("mypaas-export-%s.tar.gz", m.ID))
-	if err := createTarGz(archivePath, workDir); err != nil {
-		s.fail(m, fmt.Errorf("create archive: %w", err))
+	tarCmd := exec.CommandContext(ctx, "tar", tarArgs...)
+	if out, err := tarCmd.CombinedOutput(); err != nil {
+		s.fail(m, fmt.Errorf("tar create archive: %w: %s", err, string(out)))
 		return
 	}
 
