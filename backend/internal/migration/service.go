@@ -200,27 +200,23 @@ func (s *Service) runExport(m *Migration) {
 	mfData, _ := json.MarshalIndent(mf, "", "  ")
 	_ = os.WriteFile(filepath.Join(workDir, "manifest.json"), mfData, 0600)
 
-	// 7. Create tar.gz archive using tar CLI directly to avoid duplicating disk space.
+	// 7. Create tar.gz archive directly from multiple sources to avoid disk duplication
 	slog.Info("migration: creating archive")
 	archivePath := filepath.Join(archiveDir, fmt.Sprintf("mypaas-export-%s.tar.gz", m.ID))
 	
-	tarArgs := []string{"czf", archivePath, "-C", workDir, "databases"}
-	if _, err := os.Stat(filepath.Join(workDir, "dot-env")); err == nil {
-		tarArgs = append(tarArgs, "-C", workDir, "dot-env")
+	sources := map[string]string{
+		"": workDir, // Root of archive comes from workDir (databases, dot-env, manifest)
 	}
-	tarArgs = append(tarArgs, "-C", workDir, "manifest.json")
-	
 	persistentDirs := []string{"volumes", "compose", "static"}
 	for _, dir := range persistentDirs {
 		fullPath := filepath.Join("/var/lib/mypaas", dir)
 		if info, err := os.Stat(fullPath); err == nil && info.IsDir() {
-			tarArgs = append(tarArgs, "-C", "/var/lib/mypaas", dir)
+			sources[dir] = fullPath
 		}
 	}
 
-	tarCmd := exec.CommandContext(ctx, "tar", tarArgs...)
-	if out, err := tarCmd.CombinedOutput(); err != nil {
-		s.fail(m, fmt.Errorf("tar create archive: %w: %s", err, string(out)))
+	if err := createMultiTarGz(archivePath, sources); err != nil {
+		s.fail(m, fmt.Errorf("create multi tar: %w", err))
 		return
 	}
 
@@ -365,62 +361,90 @@ func pgEnv(databaseURL string, base []string) ([]string, error) {
 	return env, nil
 }
 
-func createTarGz(archivePath, sourceDir string) error {
+func createMultiTarGz(archivePath string, sources map[string]string) error {
 	out, err := os.Create(archivePath)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
-	gw := gzip.NewWriter(out)
+	// Use BestSpeed to compress huge files (like Minecraft worlds) much faster.
+	gw, err := gzip.NewWriterLevel(out, gzip.BestSpeed)
+	if err != nil {
+		return err
+	}
 	defer gw.Close()
 
 	tw := tar.NewWriter(gw)
 	defer tw.Close()
 
-	return filepath.WalkDir(sourceDir, func(path string, d fs.DirEntry, err error) error {
+	for prefix, sourceDir := range sources {
+		err := filepath.WalkDir(sourceDir, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err // skip files we can't read
+			}
+
+			rel, err := filepath.Rel(sourceDir, path)
+			if err != nil {
+				return err
+			}
+			if rel == "." && prefix == "" {
+				return nil
+			}
+
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+
+			header, err := tar.FileInfoHeader(info, "")
+			if err != nil {
+				return err
+			}
+
+			// Handle symlinks
+			if info.Mode()&os.ModeSymlink != 0 {
+				link, err := os.Readlink(path)
+				if err == nil {
+					header.Linkname = link
+				}
+			}
+
+			headerName := rel
+			if prefix != "" {
+				if rel == "." {
+					headerName = prefix
+				} else {
+					headerName = filepath.Join(prefix, rel)
+				}
+			}
+
+			header.Name = filepath.ToSlash(headerName)
+			if d.IsDir() {
+				header.Name += "/"
+			}
+
+			if err := tw.WriteHeader(header); err != nil {
+				return err
+			}
+
+			if d.IsDir() || !info.Mode().IsRegular() {
+				return nil
+			}
+
+			f, err := os.Open(path)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			_, err = io.Copy(tw, f)
+			return err
+		})
 		if err != nil {
 			return err
 		}
-
-		rel, err := filepath.Rel(sourceDir, path)
-		if err != nil {
-			return err
-		}
-		if rel == "." {
-			return nil
-		}
-
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-
-		header, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return err
-		}
-		header.Name = filepath.ToSlash(rel)
-		if d.IsDir() {
-			header.Name += "/"
-		}
-
-		if err := tw.WriteHeader(header); err != nil {
-			return err
-		}
-
-		if d.IsDir() {
-			return nil
-		}
-
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		_, err = io.Copy(tw, f)
-		return err
-	})
+	}
+	return nil
 }
 
 func copyDir(src, dst string) error {
