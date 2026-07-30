@@ -111,6 +111,26 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 	return i, err
 }
 
+const getGlobalResourceUsage = `-- name: GetGlobalResourceUsage :one
+SELECT
+    COALESCE(SUM(memory_limit_mb), 0)::INT      AS total_memory_mb,
+    COALESCE(SUM(cpu_limit), 0.0)::NUMERIC(6,2) AS total_cpu
+FROM projects
+WHERE deleted_at IS NULL
+`
+
+type GetGlobalResourceUsageRow struct {
+	TotalMemoryMb int32          `json:"total_memory_mb"`
+	TotalCpu      pgtype.Numeric `json:"total_cpu"`
+}
+
+func (q *Queries) GetGlobalResourceUsage(ctx context.Context) (GetGlobalResourceUsageRow, error) {
+	row := q.db.QueryRow(ctx, getGlobalResourceUsage)
+	var i GetGlobalResourceUsageRow
+	err := row.Scan(&i.TotalMemoryMb, &i.TotalCpu)
+	return i, err
+}
+
 const getProjectByID = `-- name: GetProjectByID :one
 SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,

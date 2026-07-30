@@ -6,6 +6,7 @@ import (
 
 	"mypaas/internal/config"
 	"mypaas/internal/db"
+	"mypaas/internal/host"
 	"mypaas/internal/httpx"
 )
 
@@ -95,13 +96,52 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	h.Get(w, r)
 }
 
+// HostStats returns the physical capacity of the VM and how much is allocated.
+func (h *Handler) HostStats(w http.ResponseWriter, r *http.Request) {
+	cap := host.GetCapacity()
+
+	// Calculate total allocated RAM across ALL projects
+	usage, err := h.queries.GetGlobalResourceUsage(r.Context())
+	var allocatedRAM int32
+	var allocatedCPU float64
+	if err == nil {
+		allocatedRAM = usage.TotalMemoryMb
+		if usage.TotalCpu.Valid && usage.TotalCpu.Int != nil {
+			// quick numeric conversion
+			cpuVal, _ := usage.TotalCpu.Float64Value()
+			allocatedCPU = cpuVal.Float64
+		}
+	}
+
+	res := map[string]interface{}{
+		"host_ram_bytes": cap.TotalRAMBytes,
+		"host_cpu_cores": cap.TotalCPUCores,
+		"allocated_ram_mb": allocatedRAM,
+		"allocated_cpu": allocatedCPU,
+	}
+	httpx.JSON(w, http.StatusOK, res)
+}
+
 func (h *Handler) defaults() map[string]float64 {
+	cap := host.GetCapacity()
+	
+	// Smart defaults based on physical capacity
+	defaultUserRAM := float64(h.cfg.UserRAMQuotaMB) / 1024
+	defaultProjectRAM := float64(512)
+
+	// If VM has <= 2GB RAM (approx 2048 * 1024 * 1024 = 2147483648)
+	// Give max 1.5GB to user, default 256MB per project.
+	if cap.TotalRAMBytes > 0 && cap.TotalRAMBytes <= (2500*1024*1024) {
+		defaultUserRAM = 1.5
+		defaultProjectRAM = 256
+	}
+
 	return map[string]float64{
-		"user_ram_quota_gb":      float64(h.cfg.UserRAMQuotaMB) / 1024,
+		"user_ram_quota_gb":      defaultUserRAM,
 		"user_cpu_quota":         h.cfg.UserCPUQuota,
 		"max_projects":           float64(h.cfg.MaxProjects),
 		"max_concurrent_deploys": float64(h.cfg.MaxConcurrentDeploys),
-		"project_default_ram_mb": 512,
+		"project_default_ram_mb": defaultProjectRAM,
 		"project_default_cpu":    0.5,
 		"build_timeout_minutes":  float64(h.cfg.BuildTimeoutMinutes),
 	}

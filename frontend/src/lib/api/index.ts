@@ -20,6 +20,13 @@ import type {
 	LogsResponse
 } from '$types';
 
+export interface HostStats {
+	host_ram_bytes: number;
+	host_cpu_cores: number;
+	allocated_ram_mb: number;
+	allocated_cpu: number;
+}
+
 export interface MigrationStatus {
 	id: string;
 	status: 'preparing' | 'ready' | 'failed' | 'expired';
@@ -169,6 +176,7 @@ export const api = {
 		prepareMigration: (): Promise<MigrationStatus> =>
 			request('/admin/migrate/prepare', { method: 'POST' }),
 		migrationStatus: (id: string): Promise<MigrationStatus> =>
-			request(`/admin/migrate/${id}/status`)
+			request(`/admin/migrate/${id}/status`),
+		getHostStats: (): Promise<HostStats> => request('/admin/host-stats')
 	}
 };

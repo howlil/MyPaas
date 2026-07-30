@@ -324,6 +324,7 @@ func registerRoutes(
 			r.Delete("/users/{id}", userHandler.Remove)
 			r.Get("/audit-logs", auditHandler.List)
 			r.Get("/settings", settingsHandler.Get)
+			r.Get("/host-stats", settingsHandler.HostStats)
 			r.Put("/settings", settingsHandler.Update)
 			r.Post("/migrate/prepare", migrationHandler.Prepare)
 			r.Get("/migrate/{id}/status", migrationHandler.Status)

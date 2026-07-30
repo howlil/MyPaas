@@ -13,7 +13,7 @@
 	import SectionPanel from '$components/SectionPanel.svelte';
 	import StatTile from '$components/StatTile.svelte';
 	import TableShell from '$components/TableShell.svelte';
-	import { api } from '$api';
+	import { api, type HostStats } from '$api';
 	import { toast } from '$stores/toast';
 	import { projectURL } from '$lib/utils/urls';
 	import type { Project, QuotaUsage } from '$types';
@@ -35,6 +35,7 @@
 	const breadcrumbs = [{ label: 'Projects' }];
 	let projects: Project[] = [];
 	let quota: QuotaUsage | null = null;
+	let hostStats: HostStats | null = null;
 	let loading = true;
 	let error = '';
 	let projectActionId = '';
@@ -53,6 +54,8 @@
 				[project.name, project.subdomain, project.repoUrl, project.branch, project.deployMode, project.mainService ?? '', project.status].join(' ').toLowerCase().includes(normalizedSearch)
 			)
 		: projects;
+	$: hostRamMb = hostStats ? Math.round(hostStats.host_ram_bytes / (1024 * 1024)) : 0;
+	$: hostRamWarning = hostStats && hostRamMb > 0 && hostStats.allocated_ram_mb > (hostRamMb * 0.85);
 	$: memoryConfiguredPercent = quota && quota.memoryLimitMb > 0 ? Math.min(100, (quota.memoryUsedMb / quota.memoryLimitMb) * 100) : 0;
 	$: memoryRuntimePercent = quota && quota.memoryUsedMb > 0 ? Math.min(100, (quota.memoryRuntimeMb / quota.memoryUsedMb) * 100) : 0;
 	$: cpuConfiguredPercent = quota && quota.cpuLimit > 0 ? Math.min(100, (quota.cpuUsed / quota.cpuLimit) * 100) : 0;
@@ -117,7 +120,7 @@
 		}
 		error = '';
 		try {
-			[projects, quota] = await Promise.all([api.projects.list(), api.me.quota()]);
+			[projects, quota, hostStats] = await Promise.all([api.projects.list(), api.me.quota(), api.admin.getHostStats()]);
 			lastRefreshedAt = new Date();
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to load projects';
@@ -267,6 +270,15 @@
 		</div>
 	</div>
 
+	{#if hostRamWarning}
+		<div class="mb-6 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
+			<p class="font-semibold">⚠️ VM Capacity Reached</p>
+			<p class="mt-1">
+				Your VM ({hostRamMb}MB RAM) is almost fully allocated to projects ({hostStats?.allocated_ram_mb}MB used). Deploying more projects may cause Out-Of-Memory (OOM) crashes. Consider upgrading your VM or reducing project limits in Settings.
+			</p>
+		</div>
+	{/if}
+
 	<div class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 		<StatTile label="Fleet health" value={issueCount > 0 ? 'Attention' : 'Healthy'} detail={healthyCopy} tone={issueCount > 0 ? 'danger' : 'success'} />
 		<StatTile label="Running now" value={String(runningCount)} detail={`${buildingCount} building, ${pendingCount} pending`} tone={buildingCount > 0 ? 'warning' : 'success'} />
@@ -291,7 +303,17 @@
 	<div class="mb-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
 		<SectionPanel title="Capacity and deploy modes" description="Configured quota, live resource shape, and runtime composition across connected projects." contentClass="p-0">
 			{#if quota}
-				<div class="grid gap-px bg-gray-100 dark:bg-gray-800 sm:grid-cols-2 xl:grid-cols-4">
+				<div class="grid gap-px bg-gray-100 dark:bg-gray-800 sm:grid-cols-2 xl:grid-cols-5">
+					{#if hostStats}
+						<CapacityMetricChart
+							label="Host RAM"
+							value={`${hostStats.allocated_ram_mb}/${hostRamMb} MB`}
+							detail={`${hostRamMb > 0 ? ((hostStats.allocated_ram_mb / hostRamMb) * 100).toFixed(0) : 0}% allocated`}
+							percent={hostRamMb > 0 ? Math.min(100, (hostStats.allocated_ram_mb / hostRamMb) * 100) : 0}
+							tone={hostRamWarning ? 'danger' : 'neutral'}
+							className="bg-white dark:bg-gray-900"
+						/>
+					{/if}
 					<CapacityMetricChart
 						label="Memory"
 						value={`${quota.memoryUsedMb}/${quota.memoryLimitMb} MB`}
@@ -352,10 +374,11 @@
 					</article>
 				</div>
 			{:else}
-				<div class="grid gap-0 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true">
+				<div class="grid gap-0 sm:grid-cols-2 xl:grid-cols-5" aria-busy="true">
 					<div class="h-36 animate-pulse border-b border-gray-100 bg-gray-100/70 dark:border-gray-800 dark:bg-gray-800/60 sm:border-r xl:border-b-0"></div>
 					<div class="h-36 animate-pulse border-b border-gray-100 bg-gray-100/70 dark:border-gray-800 dark:bg-gray-800/60 sm:border-r xl:border-b-0"></div>
-					<div class="h-36 animate-pulse border-b border-gray-100 bg-gray-100/70 dark:border-gray-800 dark:bg-gray-800/60 sm:border-r sm:border-b-0"></div>
+					<div class="h-36 animate-pulse border-b border-gray-100 bg-gray-100/70 dark:border-gray-800 dark:bg-gray-800/60 sm:border-r xl:border-b-0"></div>
+					<div class="h-36 animate-pulse border-b border-gray-100 bg-gray-100/70 dark:border-gray-800 dark:bg-gray-800/60 sm:border-r xl:border-b-0"></div>
 					<div class="h-36 animate-pulse bg-gray-100/70 dark:bg-gray-800/60"></div>
 				</div>
 			{/if}
