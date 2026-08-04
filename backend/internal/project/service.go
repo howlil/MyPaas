@@ -345,6 +345,11 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, er
 	if err := validateComposeConfigInput(input.DeployMode, input.ComposeFilePath, input.ComposeOverridePaths, input.ComposeWorkdir); err != nil {
 		return db.Project{}, err
 	}
+	serviceResources, err := normalizeServiceResources(input.ServiceResources)
+	if err != nil {
+		return db.Project{}, err
+	}
+	input.ServiceResources = serviceResources
 	profileID, memoryLimitMb, cpuLimit, err := resourceprofile.Resolve(input.ResourceProfile, input.DeployMode, input.MemoryLimitMb, input.CPULimit)
 	if err != nil {
 		return db.Project{}, err
@@ -473,6 +478,14 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 	if input.ComposeWorkdir != nil {
 		composeWorkdir = input.ComposeWorkdir
 	}
+	serviceResources := existing.ServiceResources
+	if len(input.ServiceResources) > 0 {
+		serviceResources = input.ServiceResources
+	}
+	serviceResources, err = normalizeServiceResources(serviceResources)
+	if err != nil {
+		return db.Project{}, err
+	}
 	if err := validateComposeConfigInput(existing.DeployMode, composeFilePath, composeOverridePaths, composeWorkdir); err != nil {
 		return db.Project{}, err
 	}
@@ -504,7 +517,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 		ComposeOverridePaths: composeOverridePaths,
 		ComposeProfiles:      composeProfiles,
 		ComposeWorkdir:       composeWorkdir,
-		ServiceResources:     input.ServiceResources,
+		ServiceResources:     serviceResources,
 	}); err != nil {
 		if isProjectUniqueViolation(err) {
 			return db.Project{}, errs.ErrProjectNameTaken
@@ -1200,4 +1213,18 @@ func normalizeStringSlice(values []string) []string {
 		return []string{}
 	}
 	return out
+}
+
+func normalizeServiceResources(value json.RawMessage) (json.RawMessage, error) {
+	trimmed := strings.TrimSpace(string(value))
+	if trimmed == "" || trimmed == "null" {
+		return json.RawMessage("{}"), nil
+	}
+
+	// service_resources must be a JSON object keyed by service name.
+	var parsed map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
+		return nil, fmt.Errorf("%w: serviceResources must be a JSON object", errs.ErrValidation)
+	}
+	return json.RawMessage(trimmed), nil
 }

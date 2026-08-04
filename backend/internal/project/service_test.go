@@ -230,6 +230,42 @@ func TestPickMainServiceFromComposeConfigPrefersPortsOverExpose(t *testing.T) {
 	}
 }
 
+func TestNormalizeServiceResourcesDefaultsToEmptyObject(t *testing.T) {
+	tests := []json.RawMessage{
+		nil,
+		json.RawMessage(""),
+		json.RawMessage("   "),
+		json.RawMessage("null"),
+	}
+	for _, tc := range tests {
+		got, err := normalizeServiceResources(tc)
+		if err != nil {
+			t.Fatalf("normalizeServiceResources(%q) error = %v", string(tc), err)
+		}
+		if string(got) != "{}" {
+			t.Fatalf("normalizeServiceResources(%q) = %s, want {}", string(tc), string(got))
+		}
+	}
+}
+
+func TestNormalizeServiceResourcesRejectsNonObjectJSON(t *testing.T) {
+	_, err := normalizeServiceResources(json.RawMessage(`["app"]`))
+	if err == nil {
+		t.Fatal("normalizeServiceResources() expected error for non-object json")
+	}
+}
+
+func TestNormalizeServiceResourcesAcceptsObjectJSON(t *testing.T) {
+	raw := json.RawMessage(`{"worker":{"memoryLimitMb":256,"cpuLimit":0.25}}`)
+	got, err := normalizeServiceResources(raw)
+	if err != nil {
+		t.Fatalf("normalizeServiceResources() error = %v", err)
+	}
+	if string(got) != string(raw) {
+		t.Fatalf("normalizeServiceResources() = %s, want %s", string(got), string(raw))
+	}
+}
+
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
