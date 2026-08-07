@@ -28,7 +28,7 @@
 		issues?: ComposeIssue[] | null;
 	};
 
-	const DEFAULT_APP_PORT = '3000';
+	const DEFAULT_APP_PORT = '80';
 	const publicOriginEnvKeys = new Set([
 		'ALLOWED_ORIGINS',
 		'APP_ORIGIN',
@@ -671,13 +671,10 @@
 	) {
 		if (mode !== 'dockerfile' && mode !== 'compose') return '';
 
-		const selectedPort = appPort.trim();
-		const portRequirement = selectedPort && portSource !== 'fallback'
-			? `- MyPaas App port is ${selectedPort}. Make the public process listen on 0.0.0.0:${selectedPort}, and keep Docker EXPOSE or the Compose container port consistent with it.`
-			: '- Inspect the application and determine its real container port. Make the public process listen on 0.0.0.0, keep Docker EXPOSE or the Compose container port consistent, and report the chosen port for the MyPaas App port field. Do not assume port 3000 unless the application actually uses it.';
+		const portRequirement = '- MyPaas automatically routes traffic to port 80 inside the container. Configure the application to listen on 0.0.0.0:80. Do not use or ask for a PORT environment variable.';
 		const envRequirement = envKeys.length > 0
-			? `- Preserve and document these environment keys already discovered by MyPaas: ${envKeys.join(', ')}. Do not put their values or any secrets in Git.`
-			: '- Discover the runtime environment keys the application needs. Add keys only to .env.example with safe placeholders; never put secret values in Git.';
+			? `- Preserve and document these environment keys already discovered by MyPaas: ${envKeys.join(', ')}. Remove any PORT or APP_PORT keys since the app must listen on port 80. Do not put secret values in Git.`
+			: '- Discover the runtime environment keys the application needs. Add keys only to .env.example with safe placeholders. Do not add PORT or APP_PORT keys since the app must listen on port 80. Never put secret values in Git.';
 		const repositoryContext = [
 			projectName.trim() ? `- MyPaas project: ${projectName.trim()}` : '',
 			repoUrl.trim() ? `- Repository: ${repoUrl.trim()}` : '',
@@ -722,7 +719,7 @@
 			'- Keep configuration in environment variables and do not bake credentials, tokens, URLs with secrets, or machine-specific paths into the image.',
 			envRequirement,
 			'- Preserve current application behavior. Make only the code/config changes required for a reliable production container.',
-			'- Update the README with local container commands and the exact MyPaas values to enter: deployment mode, App port, Main service when applicable, and required environment keys.',
+			'- Update the README with local container commands and the exact MyPaas values to enter: deployment mode, Main service when applicable, and required environment keys.',
 			'',
 			'Validation:',
 			mode === 'compose'
