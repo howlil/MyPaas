@@ -315,8 +315,29 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
     @media (prefers-reduced-motion: reduce) {{
       *, *::before, *::after {{ scroll-behavior: auto !important; transition-duration: .01ms !important; }}
     }}
+    :root.dark {{
+      --bg: #0f172a;
+      --surface: #111827;
+      --surface-muted: #1f2937;
+      --surface-soft: #0b1220;
+      --border: #2d3748;
+      --border-strong: #475569;
+      --ink: #f8fafc;
+      --muted: #cbd5e1;
+      --subtle: #94a3b8;
+      --accent: #34d399;
+      --accent-strong: #a7f3d0;
+      --accent-soft: rgba(16, 185, 129, .16);
+      --danger: #fecaca;
+      --danger-soft: rgba(127, 29, 29, .28);
+      --warning: #fde68a;
+      --warning-soft: rgba(146, 64, 14, .22);
+      --info: #bfdbfe;
+      --info-soft: rgba(30, 64, 175, .24);
+      --focus: rgba(52, 211, 153, .22);
+    }}
     @media (prefers-color-scheme: dark) {{
-      :root {{
+      :root:not(.light) {{
         --bg: #0f172a;
         --surface: #111827;
         --surface-muted: #1f2937;
@@ -338,14 +359,28 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
         --focus: rgba(52, 211, 153, .22);
       }}
     }}
+    .theme-toggle {{ cursor: pointer; padding: 5px 8px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; transition: color .16s, background .16s; }}
+    .theme-toggle:hover {{ color: var(--ink); background: var(--surface-muted); }}
   </style>
 </head>
 <body>
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {{
+      document.documentElement.classList.add('dark');
+    }} else if (savedTheme === 'light') {{
+      document.documentElement.classList.add('light');
+    }}
+  </script>
   <main>
     <header>
       <div class="topline">
         <div class="product-mark"><span class="mark-dot" aria-hidden="true"></span>MyPaas installer</div>
         <div class="install-meta" aria-label="Install context">
+          <button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
+            <svg id="theme-icon-sun" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+            <svg id="theme-icon-moon" viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          </button>
           <span class="meta-chip">Environment <code>{esc(ENV_FILE)}</code></span>
           <span class="meta-chip">Fresh Linux VM</span>
         </div>
@@ -406,7 +441,7 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
                   <li>Wait until Cloudflare shows the domain as active before testing MyPaas routes.</li>
                 </ol>
               </div>
-              <div class="notice">Example: if you enter <code>mypaas.my.id</code>, a project named <code>crud</code> will route to <code>crud.mypaas.my.id</code>.</div>
+              <div class="notice">Example: if you enter <code>example.com</code>, a project named <code>crud</code> will route to <code>crud.example.com</code>.</div>
             </div>
             <div class="grid">
               <div class="field">
@@ -649,6 +684,36 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
     owner.addEventListener('input', updateDerivedText);
     callback.addEventListener('input', updateDerivedText);
     showStep(0);
+
+    const themeToggle = document.getElementById('theme-toggle');
+    const themeIconSun = document.getElementById('theme-icon-sun');
+    const themeIconMoon = document.getElementById('theme-icon-moon');
+    function updateThemeIcon() {{
+      const isDark = document.documentElement.classList.contains('dark') || (!document.documentElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (isDark) {{
+        themeIconSun.style.display = 'block';
+        themeIconMoon.style.display = 'none';
+      }} else {{
+        themeIconSun.style.display = 'none';
+        themeIconMoon.style.display = 'block';
+      }}
+    }}
+    if (themeToggle) {{
+      updateThemeIcon();
+      themeToggle.addEventListener('click', () => {{
+        const isDark = document.documentElement.classList.contains('dark') || (!document.documentElement.classList.contains('light') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (isDark) {{
+          document.documentElement.classList.remove('dark');
+          document.documentElement.classList.add('light');
+          localStorage.setItem('theme', 'light');
+        }} else {{
+          document.documentElement.classList.remove('light');
+          document.documentElement.classList.add('dark');
+          localStorage.setItem('theme', 'dark');
+        }}
+        updateThemeIcon();
+      }});
+    }}
   </script>
 </body>
 </html>"""
@@ -733,8 +798,18 @@ def success_html() -> bytes:
     h1 {{ margin: 0; font-size: 24px; line-height: 1.2; }}
     p {{ margin: 0; color: var(--muted); line-height: 1.55; }}
     code {{ display: inline-block; max-width: 100%; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 4px; background: #f3f4f6; padding: 1px 4px; color: var(--ink); }}
+    :root.dark {{
+      --bg: #0f172a;
+      --surface: #111827;
+      --border: #2d3748;
+      --ink: #f8fafc;
+      --muted: #cbd5e1;
+      --accent: #34d399;
+      --accent-soft: rgba(16, 185, 129, .16);
+    }}
+    :root.dark code {{ background: #1f2937; }}
     @media (prefers-color-scheme: dark) {{
-      :root {{
+      :root:not(.light) {{
         --bg: #0f172a;
         --surface: #111827;
         --border: #2d3748;
@@ -743,11 +818,19 @@ def success_html() -> bytes:
         --accent: #34d399;
         --accent-soft: rgba(16, 185, 129, .16);
       }}
-      code {{ background: #1f2937; }}
+      :root:not(.light) code {{ background: #1f2937; }}
     }}
   </style>
 </head>
 <body>
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {{
+      document.documentElement.classList.add('dark');
+    }} else if (savedTheme === 'light') {{
+      document.documentElement.classList.add('light');
+    }}
+  </script>
   <main>
     <section>
       <span class="status-mark" aria-hidden="true">✓</span>
@@ -768,3 +851,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
