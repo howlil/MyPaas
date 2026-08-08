@@ -78,7 +78,7 @@
 			},
 			scales: {
 				x: {
-					grid: { display: false },
+					grid: { display: true, color: 'rgba(156, 163, 175, 0.05)', drawTicks: false },
 					border: { display: false },
 					ticks: { color: '#9ca3af', font: { size: 11 }, maxTicksLimit: 8 }
 				},
@@ -87,7 +87,7 @@
 					display: true,
 					position: 'left',
 					beginAtZero: true,
-					grid: { color: 'rgba(156, 163, 175, 0.1)' },
+					grid: { color: 'rgba(156, 163, 175, 0.05)', drawTicks: false },
 					border: { display: false },
 					ticks: {
 						color: '#9ca3af',

@@ -131,7 +131,7 @@
 							<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
 								<Activity class="h-4 w-4" /> Total Requests
 							</div>
-							<div class="mt-1 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+							<div class="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">
 								{snapshot.analytics.total_requests.toLocaleString()}
 							</div>
 						</div>
@@ -139,7 +139,7 @@
 							<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
 								<Globe class="h-4 w-4" /> Bandwidth
 							</div>
-							<div class="mt-1 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+							<div class="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">
 								{(snapshot.analytics.bandwidth / (1024 * 1024)).toFixed(2)} MB
 							</div>
 						</div>
@@ -147,7 +147,7 @@
 							<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
 								<AlertTriangle class="h-4 w-4 {snapshot.analytics.errors > 0 ? 'text-amber-500' : ''}" /> Edge Errors
 							</div>
-							<div class="mt-1 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+							<div class="mt-1 text-2xl font-bold tracking-tight text-gray-950 dark:text-white">
 								{snapshot.analytics.errors.toLocaleString()}
 							</div>
 						</div>
