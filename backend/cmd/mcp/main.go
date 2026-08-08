@@ -76,6 +76,8 @@ func main() {
 			mcp.Description("The UUID of the project to start"),
 		),
 	)
+	s.AddTool(startProjectTool, startProjectHandler)
+
 	// Tool: create_project
 	createProjectTool := mcp.NewTool("create_project",
 		mcp.WithDescription("Create a new project in MyPaas from a Git repository"),
@@ -83,7 +85,7 @@ func main() {
 		mcp.WithString("repoUrl", mcp.Required(), mcp.Description("GitHub Repository URL (e.g., https://github.com/user/repo)")),
 		mcp.WithString("branch", mcp.Required(), mcp.Description("Git branch to deploy (e.g., main)")),
 		mcp.WithString("deployMode", mcp.Required(), mcp.Description("Deploy mode: 'dockerfile', 'compose', or 'static'")),
-		mcp.WithString("resourceProfile", mcp.Description("Resource profile: 'nano', 'micro', 'small', 'medium' (default: 'small')")),
+		mcp.WithString("resourceProfile", mcp.Description("Resource profile: 'static', 'go-small', 'node-python', 'compose-main', 'custom' (default: 'go-small')")),
 		mcp.WithNumber("appPort", mcp.Description("Port the app listens on (default: 3000, 80 for static)")),
 	)
 	s.AddTool(createProjectTool, createProjectHandler)
@@ -132,7 +134,11 @@ func listProjectsHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp
 }
 
 func deployProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	projectID, ok := request.Params.Arguments["project_id"].(string)
+	args, ok := request.Params.Arguments.(map[string]interface{})
+	if !ok {
+		return mcp.NewToolResultError("invalid arguments"), nil
+	}
+	projectID, ok := args["project_id"].(string)
 	if !ok {
 		return mcp.NewToolResultError("project_id must be a string"), nil
 	}
@@ -145,7 +151,11 @@ func deployProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 }
 
 func getProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	projectID, ok := request.Params.Arguments["project_id"].(string)
+	args, ok := request.Params.Arguments.(map[string]interface{})
+	if !ok {
+		return mcp.NewToolResultError("invalid arguments"), nil
+	}
+	projectID, ok := args["project_id"].(string)
 	if !ok {
 		return mcp.NewToolResultError("project_id must be a string"), nil
 	}
@@ -158,7 +168,11 @@ func getProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 }
 
 func stopProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	projectID, ok := request.Params.Arguments["project_id"].(string)
+	args, ok := request.Params.Arguments.(map[string]interface{})
+	if !ok {
+		return mcp.NewToolResultError("invalid arguments"), nil
+	}
+	projectID, ok := args["project_id"].(string)
 	if !ok {
 		return mcp.NewToolResultError("project_id must be a string"), nil
 	}
@@ -171,7 +185,11 @@ func stopProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 }
 
 func startProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	projectID, ok := request.Params.Arguments["project_id"].(string)
+	args, ok := request.Params.Arguments.(map[string]interface{})
+	if !ok {
+		return mcp.NewToolResultError("invalid arguments"), nil
+	}
+	projectID, ok := args["project_id"].(string)
 	if !ok {
 		return mcp.NewToolResultError("project_id must be a string"), nil
 	}
@@ -184,16 +202,16 @@ func startProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp
 }
 
 func createProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	args := request.Params.Arguments
+	args, ok := request.Params.Arguments.(map[string]interface{})
+	if !ok {
+		return mcp.NewToolResultError("invalid arguments"), nil
+	}
 	name, _ := args["name"].(string)
 	repoUrl, _ := args["repoUrl"].(string)
 	branch, _ := args["branch"].(string)
 	deployMode, _ := args["deployMode"].(string)
 
-	resourceProfile, ok := args["resourceProfile"].(string)
-	if !ok || resourceProfile == "" {
-		resourceProfile = "small"
-	}
+	resourceProfile, _ := args["resourceProfile"].(string)
 
 	appPort := 3000
 	if p, ok := args["appPort"].(float64); ok {
@@ -209,8 +227,6 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 		"deployMode":      deployMode,
 		"resourceProfile": resourceProfile,
 		"appPort":         appPort,
-		"memoryLimitMb":   256,
-		"cpuLimit":        0.25,
 		"sharedPostgres":  false,
 	}
 
