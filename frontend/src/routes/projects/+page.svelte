@@ -43,6 +43,8 @@
 	let currentPage = 0;
 	let searchQuery = '';
 	let projectUptimes: Record<string, string> = {};
+	let projectCpu: Record<string, number> = {};
+	let projectMemory: Record<string, number> = {};
 	let uptimeLoadingIds = new Set<string>();
 	let uptimeRefreshToken = 0;
 	let lastRefreshedAt: Date | null = null;
@@ -112,6 +114,8 @@
 		if (projectsInFlight) return;
 		uptimeRefreshToken += 1;
 		projectUptimes = {};
+		projectCpu = {};
+		projectMemory = {};
 		uptimeLoadingIds = new Set();
 		await loadProjects(background);
 	}
@@ -223,7 +227,12 @@
 				try {
 					const snapshot = await api.metrics.snapshot(project.id);
 					if (refreshToken !== uptimeRefreshToken) return;
-					projectUptimes = { ...projectUptimes, [project.id]: snapshot.items[0]?.uptime ?? '-' };
+					const metrics = snapshot.items[0];
+					projectUptimes = { ...projectUptimes, [project.id]: metrics?.uptime ?? '-' };
+					if (metrics) {
+						projectCpu = { ...projectCpu, [project.id]: metrics.cpu };
+						projectMemory = { ...projectMemory, [project.id]: metrics.memoryMb };
+					}
 				} catch {
 					if (refreshToken !== uptimeRefreshToken) return;
 					projectUptimes = { ...projectUptimes, [project.id]: '-' };
@@ -322,7 +331,7 @@
 					<CapacityMetricChart
 						label="Memory"
 						value={`${quota.memoryUsedMb}/${quota.memoryLimitMb} MB`}
-						detail={`${quota.memoryRuntimeMb} MB live / ${memoryRuntimePercent.toFixed(0)}% active`}
+						detail={`${(quota.memoryLimitMb > 0 ? (quota.memoryUsedMb / quota.memoryLimitMb) * 100 : 0).toFixed(0)}% allocated`}
 						percent={memoryConfiguredPercent}
 						tone={memoryConfiguredPercent >= 80 ? 'warning' : 'neutral'}
 						className="bg-white dark:bg-gray-900"
@@ -330,7 +339,7 @@
 					<CapacityMetricChart
 						label="CPU"
 						value={`${quota.cpuUsed.toFixed(2)}/${quota.cpuLimit.toFixed(2)} cores`}
-						detail={`${quota.cpuRuntime.toFixed(1)}% live runtime`}
+						detail={`${(quota.cpuLimit > 0 ? (quota.cpuUsed / quota.cpuLimit) * 100 : 0).toFixed(0)}% allocated`}
 						percent={cpuConfiguredPercent}
 						tone={cpuConfiguredPercent >= 80 ? 'warning' : 'info'}
 						className="bg-white dark:bg-gray-900"
@@ -450,12 +459,13 @@
 		</svelte:fragment>
 
 		<div
-			class="hidden w-full grid-cols-[minmax(0,1.35fr)_minmax(0,0.8fr)_minmax(0,1.35fr)_minmax(0,1.05fr)_minmax(0,0.55fr)_minmax(0,0.55fr)_4.75rem] items-center gap-x-4 border-b border-gray-100 bg-gray-50/70 px-4 py-2 text-xs font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 lg:grid"
+			class="hidden w-full grid-cols-[minmax(0,1.35fr)_minmax(0,0.8fr)_minmax(0,1.35fr)_minmax(0,1.05fr)_minmax(0,0.7fr)_minmax(0,0.55fr)_minmax(0,0.55fr)_4.75rem] items-center gap-x-4 border-b border-gray-100 bg-gray-50/70 px-4 py-2 text-xs font-medium text-gray-500 dark:border-gray-800 dark:bg-gray-900/70 dark:text-gray-400 lg:grid"
 		>
 			<span>Project</span>
 			<span>Status</span>
 			<span>App URL</span>
 			<span>Runtime</span>
+			<span>Live Usage</span>
 			<span>Uptime</span>
 			<span>Updated</span>
 			<span class="text-right">Actions</span>
@@ -463,7 +473,7 @@
 		<div class="divide-y divide-gray-100 dark:divide-gray-800">
 			{#each visibleProjects as project}
 				<div
-					class="grid gap-y-3 px-4 py-4 transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-900/70 lg:w-full lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.8fr)_minmax(0,1.35fr)_minmax(0,1.05fr)_minmax(0,0.55fr)_minmax(0,0.55fr)_4.75rem] lg:items-center lg:gap-x-4"
+					class="grid gap-y-3 px-4 py-4 transition-colors hover:bg-gray-50/80 dark:hover:bg-gray-900/70 lg:w-full lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.8fr)_minmax(0,1.35fr)_minmax(0,1.05fr)_minmax(0,0.7fr)_minmax(0,0.55fr)_minmax(0,0.55fr)_4.75rem] lg:items-center lg:gap-x-4"
 				>
 					<div class="min-w-0">
 						<a href="/projects/{project.id}" class="block truncate text-sm font-semibold text-gray-950 hover:underline dark:text-white">
@@ -483,6 +493,15 @@
 							<span class="truncate">{project.mainService}</span>
 						{/if}
 						<span>{project.memoryLimitMb}MB</span>
+					</div>
+					<div class="font-mono text-xs text-gray-500 dark:text-gray-400">
+						{#if project.id in projectMemory}
+							{projectMemory[project.id].toFixed(0)}MB / {projectCpu[project.id].toFixed(1)}%
+						{:else if uptimeLoadingIds.has(project.id)}
+							Loading
+						{:else}
+							-
+						{/if}
 					</div>
 					<div class="font-mono text-xs text-gray-500 dark:text-gray-400">
 						{projectUptimes[project.id] ?? (uptimeLoadingIds.has(project.id) ? 'Loading' : '-')}
