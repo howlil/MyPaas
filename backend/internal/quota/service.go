@@ -18,7 +18,7 @@ import (
 	"mypaas/internal/errs"
 )
 
-const runtimeUsageTimeout = 2500 * time.Millisecond
+const runtimeUsageTimeout = 10000 * time.Millisecond
 
 type Service struct {
 	queries *db.Queries
@@ -185,6 +185,9 @@ func (s *Service) runtimeUsage(ctx context.Context, userID uuid.UUID) (int32, fl
 }
 
 func (s *Service) projectMetrics(ctx context.Context, project db.Project) (container.Metrics, error) {
+	if project.DeployMode == "static" {
+		return container.Metrics{}, nil
+	}
 	name := "mypaas-" + project.Name
 	if project.DeployMode == "compose" {
 		metrics, err := s.docker.ComposeStats(ctx, name, mainService(project))
