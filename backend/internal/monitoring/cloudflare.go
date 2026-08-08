@@ -31,29 +31,27 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 	}
 
 	query := `
-		query GetZoneAnalytics($zoneTag: string, $host: string, $date: string) {
+		query GetZoneAnalytics($zoneTag: string, $host: string, $datetime: string) {
 			viewer {
 				zones(filter: {zoneTag: $zoneTag}) {
-					httpRequests1dGroups(
-						limit: 2,
-						filter: {clientRequestHTTPHost: $host, date_geq: $date}
+					httpRequestsAdaptiveGroups(
+						limit: 1,
+						filter: {clientRequestHTTPHost: $host, datetime_geq: $datetime}
 					) {
+						count
 						sum {
-							requests
-							bytes
+							edgeResponseBytes
 						}
 					}
-					errors: httpRequests1dGroups(
-						limit: 2,
+					errors: httpRequestsAdaptiveGroups(
+						limit: 1,
 						filter: {
 							clientRequestHTTPHost: $host,
-							date_geq: $date,
+							datetime_geq: $datetime,
 							edgeResponseStatus_gt: 399
 						}
 					) {
-						sum {
-							requests
-						}
+						count
 					}
 				}
 			}
@@ -63,9 +61,9 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 	reqBody := map[string]interface{}{
 		"query": query,
 		"variables": map[string]string{
-			"zoneTag": c.cfg.CloudflareZoneID,
-			"host":    subdomain,
-			"date":    time.Now().Add(-24 * time.Hour).Format("2006-01-02"),
+			"zoneTag":  c.cfg.CloudflareZoneID,
+			"host":     subdomain,
+			"datetime": time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
 		},
 	}
 
@@ -92,16 +90,14 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 		Data struct {
 			Viewer struct {
 				Zones []struct {
-					HttpRequests1dGroups []struct {
-						Sum struct {
-							Requests int `json:"requests"`
-							Bytes    int `json:"bytes"`
+					HttpRequestsAdaptiveGroups []struct {
+						Count int `json:"count"`
+						Sum   struct {
+							EdgeResponseBytes int `json:"edgeResponseBytes"`
 						} `json:"sum"`
-					} `json:"httpRequests1dGroups"`
+					} `json:"httpRequestsAdaptiveGroups"`
 					Errors []struct {
-						Sum struct {
-							Requests int `json:"requests"`
-						} `json:"sum"`
+						Count int `json:"count"`
 					} `json:"errors"`
 				} `json:"zones"`
 			} `json:"viewer"`
@@ -120,12 +116,12 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 	var data MetricsData
 	if len(payload.Data.Viewer.Zones) > 0 {
 		zone := payload.Data.Viewer.Zones[0]
-		for _, g := range zone.HttpRequests1dGroups {
-			data.TotalRequests += g.Sum.Requests
-			data.Bandwidth += g.Sum.Bytes
+		for _, g := range zone.HttpRequestsAdaptiveGroups {
+			data.TotalRequests += g.Count
+			data.Bandwidth += g.Sum.EdgeResponseBytes
 		}
 		for _, g := range zone.Errors {
-			data.Errors += g.Sum.Requests
+			data.Errors += g.Count
 		}
 	}
 
