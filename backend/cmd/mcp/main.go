@@ -76,7 +76,17 @@ func main() {
 			mcp.Description("The UUID of the project to start"),
 		),
 	)
-	s.AddTool(startProjectTool, startProjectHandler)
+	// Tool: create_project
+	createProjectTool := mcp.NewTool("create_project",
+		mcp.WithDescription("Create a new project in MyPaas from a Git repository"),
+		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the project (e.g., my-awesome-app)")),
+		mcp.WithString("repoUrl", mcp.Required(), mcp.Description("GitHub Repository URL (e.g., https://github.com/user/repo)")),
+		mcp.WithString("branch", mcp.Required(), mcp.Description("Git branch to deploy (e.g., main)")),
+		mcp.WithString("deployMode", mcp.Required(), mcp.Description("Deploy mode: 'dockerfile', 'compose', or 'static'")),
+		mcp.WithString("resourceProfile", mcp.Description("Resource profile: 'nano', 'micro', 'small', 'medium' (default: 'small')")),
+		mcp.WithNumber("appPort", mcp.Description("Port the app listens on (default: 3000, 80 for static)")),
+	)
+	s.AddTool(createProjectTool, createProjectHandler)
 
 	if err := server.ServeStdio(s); err != nil {
 		fmt.Fprintf(os.Stderr, "MCP server error: %v\n", err)
@@ -172,3 +182,43 @@ func startProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp
 	}
 	return mcp.NewToolResultText("Project started successfully: " + resp), nil
 }
+
+func createProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	args := request.Params.Arguments
+	name, _ := args["name"].(string)
+	repoUrl, _ := args["repoUrl"].(string)
+	branch, _ := args["branch"].(string)
+	deployMode, _ := args["deployMode"].(string)
+
+	resourceProfile, ok := args["resourceProfile"].(string)
+	if !ok || resourceProfile == "" {
+		resourceProfile = "small"
+	}
+
+	appPort := 3000
+	if p, ok := args["appPort"].(float64); ok {
+		appPort = int(p)
+	} else if deployMode == "static" {
+		appPort = 80
+	}
+
+	payload := map[string]interface{}{
+		"name":            name,
+		"repoUrl":         repoUrl,
+		"branch":          branch,
+		"deployMode":      deployMode,
+		"resourceProfile": resourceProfile,
+		"appPort":         appPort,
+		"memoryLimitMb":   256,
+		"cpuLimit":        0.25,
+		"sharedPostgres":  false,
+	}
+
+	body, _ := json.Marshal(payload)
+	resp, err := doRequest("POST", "/projects", body)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+	return mcp.NewToolResultText("Project created successfully: " + resp), nil
+}
+
