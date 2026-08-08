@@ -20,6 +20,7 @@
 	let loadingSettings = true;
 	let savingSettings = false;
 	let regeneratingToken = false;
+	let confirmRegenerateToken = false;
 
 	let migration: MigrationStatus | null = null;
 	let preparingMigration = false;
@@ -73,13 +74,18 @@
 		}
 	}
 
+	function requestRegenerateToken() {
+		confirmRegenerateToken = true;
+	}
+
 	async function regenerateToken() {
-		if (!confirm('Are you sure you want to regenerate the MCP Token? Any existing AI agent using this token will lose access until updated.')) return;
+		if (regeneratingToken) return;
 		regeneratingToken = true;
 		try {
 			const data = await api.admin.regenerateMCPToken();
 			mcpToken = data.mcp_api_token ?? '';
 			toast.success('MCP Token regenerated successfully');
+			confirmRegenerateToken = false;
 		} catch (error) {
 			toast.error('Failed to regenerate token');
 			console.error(error);
@@ -215,7 +221,7 @@
 						class="field block w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400"
 					/>
 					{#if mcpToken}
-						<ActionButton variant="secondary" size="md" on:click={() => copyToClipboard(mcpToken, 'mcp_token')}>
+						<ActionButton variant="secondary" on:click={() => copyToClipboard(mcpToken, 'mcp_token')}>
 							{#if copiedText === 'mcp_token'}
 								<Check class="h-4 w-4" />
 							{:else}
@@ -223,14 +229,30 @@
 							{/if}
 						</ActionButton>
 					{/if}
-					<ActionButton variant="secondary" size="md" on:click={regenerateToken} loading={regeneratingToken}>
-						<RefreshCw class="mr-2 h-4 w-4" />
-						Generate
-					</ActionButton>
 				</div>
 				<p class="mt-2 text-xs text-gray-500">
 					This token is saved automatically to the <code>MYPAAS_API_TOKEN</code> environment variable.
 				</p>
+				
+				<div class="mt-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+					{#if confirmRegenerateToken}
+						<div class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+							<p>Regenerating the token will disconnect any AI agents using the old token.</p>
+							<div class="mt-3 flex flex-wrap gap-2">
+								<ActionButton variant="ghost" size="xs" on:click={() => (confirmRegenerateToken = false)}>
+									Cancel
+								</ActionButton>
+								<ActionButton variant="danger" size="xs" on:click={regenerateToken} loading={regeneratingToken} loadingLabel="Regenerating...">
+									Regenerate now
+								</ActionButton>
+							</div>
+						</div>
+					{:else}
+						<ActionButton on:click={requestRegenerateToken}>
+							Regenerate token
+						</ActionButton>
+					{/if}
+				</div>
 
 				<details class="mt-4 rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900/50">
 					<summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800/50">
@@ -283,8 +305,7 @@
 					</div>
 				</div>
 
-				<ActionButton variant="primary" size="md" on:click={startMigration}>
-					<Package class="mr-2 h-4 w-4" />
+				<ActionButton variant="primary" on:click={startMigration}>
 					Prepare Migration Package
 				</ActionButton>
 			</div>
