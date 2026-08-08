@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"mypaas/internal/config"
@@ -29,7 +30,7 @@ func Middleware(tokens *TokenService, queries *db.Queries, cfg *config.Config) f
 			if cfg != nil && cfg.ApiToken != "" && raw == cfg.ApiToken {
 				// Bypass JWT validation and impersonate owner
 				next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), User{
-					ID:    0,
+					ID:    uuid.Nil,
 					Email: "api-client@mypaas.internal",
 					Role:  "owner",
 				})))
