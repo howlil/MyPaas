@@ -8,7 +8,14 @@ import (
 
 type MetricsSnapshotResponse struct {
 	Items       []ContainerMetricsResponse `json:"items"`
+	Analytics   *CloudflareAnalytics       `json:"analytics,omitempty"`
 	CollectedAt string                     `json:"collectedAt"`
+}
+
+type CloudflareAnalytics struct {
+	TotalRequests int `json:"total_requests"`
+	Bandwidth     int `json:"bandwidth"`
+	Errors        int `json:"errors"`
 }
 
 type ContainerMetricsResponse struct {

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Cloudflare Analytics integration in Project Metrics with global setup form, GraphQL API backend, and automatic subdomain-level filtering (Total Requests, Bandwidth, Edge Errors).
 - Microservice env support: per-service `.env.example` templates are auto-discovered in subdirectories. At deploy time, MyPaas generates a `.env` file next to each template by substituting the user's env var values. Existing `.env` files are never overwritten. Build log shows "Generated apps/api/.env from .env.example" for each file.
 - Env var service attribution: compose `environment:` references are matched to discovered env vars so the UI shows which compose service needs each var (badge per service).
 - Env var conflict detection: when the same key has different default values across service `.env.example` files, a warning shows the conflicting values and which services declare them.

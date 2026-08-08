@@ -143,8 +143,15 @@ export interface ContainerMetrics {
 	uptime:         string;   // e.g. "2h 14m"
 }
 
+export interface CloudflareAnalytics {
+	total_requests: number;
+	bandwidth:      number;
+	errors:         number;
+}
+
 export interface MetricsSnapshot {
 	items:       ContainerMetrics[];
+	analytics?:  CloudflareAnalytics;
 	collectedAt: string;
 }
 

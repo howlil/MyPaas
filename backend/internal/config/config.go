@@ -39,6 +39,9 @@ type Config struct {
 	MetricsUsername string
 	MetricsPassword string
 
+	CloudflareAPIToken string
+	CloudflareZoneID   string
+
 	BackupEnabled        bool
 	BackupDir            string
 	BackupDailyAt        string
@@ -169,6 +172,9 @@ func Load() (*Config, error) {
 
 		MetricsUsername: envStr("METRICS_USERNAME", ""),
 		MetricsPassword: envStr("METRICS_PASSWORD", ""),
+
+		CloudflareAPIToken: envStr("CLOUDFLARE_API_TOKEN", ""),
+		CloudflareZoneID:   envStr("CLOUDFLARE_ZONE_ID", ""),
 
 		BackupEnabled:        backupEnabled,
 		BackupDir:            envPath("BACKUP_DIR", "/var/lib/mypaas/backups"),

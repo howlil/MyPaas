@@ -404,9 +404,19 @@
 						class="field w-full font-mono text-sm"
 						placeholder='&#123;&#10;  "db": &#123;&#10;    "memoryLimitMb": 512,&#10;    "cpuLimit": 0.5&#10;  &#125;&#10;&#125;'
 					></textarea>
-					<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+					<p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
 						Set memory and CPU limits for non-main services. Key is service name.
 					</p>
+					<div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+						<span class="font-medium text-gray-700 dark:text-gray-300">Example:</span>
+						<pre class="mt-1 rounded-md border border-gray-100 bg-gray-50 p-2 text-[11px] text-gray-600 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-400">
+&#123;
+  "db": &#123;
+    "memoryLimitMb": 256,
+    "cpuLimit": 0.25
+  &#125;
+&#125;</pre>
+					</div>
 				</div>
 				{#if nameChanged}
 					<div class="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/70 px-5 py-3 dark:border-gray-800 dark:bg-gray-900/70">

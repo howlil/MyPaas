@@ -170,9 +170,11 @@ export const api = {
 		removeUser:  (id: string):             Promise<void>   => request(`/admin/users/${id}`, { method: 'DELETE' }),
 		listAuditLogs: (page = 0, pageSize = 50, lookahead = false): Promise<AuditLog[]> =>
 			request(`/admin/audit-logs?limit=${pageSize + (lookahead ? 1 : 0)}&offset=${page * pageSize}`),
-		getSettings: (): Promise<Record<string, number> & { mcp_api_token?: string }> => request('/admin/settings'),
+		getSettings: (): Promise<Record<string, number> & { mcp_api_token?: string; cloudflare_configured?: boolean }> => request('/admin/settings'),
 		updateSettings: (d: Record<string, number>): Promise<Record<string, number>> =>
 			request('/admin/settings', { method: 'PUT', body: JSON.stringify(d) }),
+		updateCloudflareConfig: (token: string, zone_id: string): Promise<void> =>
+			request('/admin/settings/cloudflare', { method: 'POST', body: JSON.stringify({ token, zone_id }) }),
 		regenerateMCPToken: (): Promise<Record<string, number> & { mcp_api_token?: string }> =>
 			request('/admin/settings/mcp-token/regenerate', { method: 'POST' }),
 		prepareMigration: (): Promise<MigrationStatus> =>

@@ -31,6 +31,7 @@ import (
 	"mypaas/internal/envdiscover"
 	"mypaas/internal/envvar"
 	"mypaas/internal/errs"
+	"mypaas/internal/monitoring"
 	"mypaas/internal/port"
 	"mypaas/internal/staticdeploy"
 )
@@ -62,6 +63,19 @@ func NewService(cfg *config.Config, queries *db.Queries, envs *envvar.Service, p
 		deploySem: make(chan struct{}, maxConcurrent),
 		locks:     make(map[uuid.UUID]*sync.Mutex),
 	}
+}
+
+func (s *Service) CloudflareAnalytics(ctx context.Context, projectID uuid.UUID) (*monitoring.MetricsData, error) {
+	if s.cfg.CloudflareAPIToken == "" {
+		return nil, nil // not configured
+	}
+	project, err := s.queries.GetProjectByID(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	client := monitoring.NewCloudflareClient(s.cfg)
+	subdomain := project.Name + "." + s.cfg.PublicDomain
+	return client.GetProjectMetrics(ctx, subdomain)
 }
 
 // ReconcileMissingContainers checks all 'running' projects and triggers a manual deployment

@@ -332,6 +332,7 @@ func registerRoutes(
 			r.Get("/settings", settingsHandler.Get)
 			r.Get("/host-stats", settingsHandler.HostStats)
 			r.Put("/settings", settingsHandler.Update)
+			r.Post("/settings/cloudflare", settingsHandler.UpdateCloudflareConfig)
 			r.Post("/settings/mcp-token/regenerate", settingsHandler.RegenerateMCPToken)
 			r.Post("/migrate/prepare", migrationHandler.Prepare)
 			r.Get("/migrate/{id}/status", migrationHandler.Status)

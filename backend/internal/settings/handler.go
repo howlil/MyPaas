@@ -66,6 +66,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res["mcp_api_token"] = h.cfg.ApiToken
+	res["cloudflare_configured"] = h.cfg.CloudflareAPIToken != "" && h.cfg.CloudflareZoneID != ""
 
 	httpx.JSON(w, http.StatusOK, res)
 }
@@ -82,6 +83,33 @@ func (h *Handler) RegenerateMCPToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.cfg.ApiToken = newToken
+	h.Get(w, r)
+}
+
+type cloudflareReq struct {
+	Token  string `json:"token"`
+	ZoneID string `json:"zone_id"`
+}
+
+func (h *Handler) UpdateCloudflareConfig(w http.ResponseWriter, r *http.Request) {
+	var req cloudflareReq
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body", nil)
+		return
+	}
+
+	if err := updateEnvFile("CLOUDFLARE_API_TOKEN", req.Token); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "ENV_WRITE_FAILED", "Failed to save token", nil)
+		return
+	}
+	if err := updateEnvFile("CLOUDFLARE_ZONE_ID", req.ZoneID); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "ENV_WRITE_FAILED", "Failed to save zone ID", nil)
+		return
+	}
+
+	h.cfg.CloudflareAPIToken = req.Token
+	h.cfg.CloudflareZoneID = req.ZoneID
+
 	h.Get(w, r)
 }
 

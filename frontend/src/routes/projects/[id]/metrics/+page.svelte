@@ -7,10 +7,13 @@
 	import ErrorState from '$components/ErrorState.svelte';
 	import IconButton from '$components/IconButton.svelte';
 	import SectionPanel from '$components/SectionPanel.svelte';
+	import CloudflareSetup from './CloudflareSetup.svelte';
 	import { api } from '$api';
 	import type { MetricsSnapshot } from '$types';
+	import { Globe, Activity, AlertTriangle } from '@lucide/svelte';
 
 	let snapshot: MetricsSnapshot | null = null;
+	let cloudflareConfigured: boolean | null = null;
 	let selectedService = '';
 	let loading = true;
 	let refreshing = false;
@@ -46,6 +49,16 @@
 	async function load(background = false) {
 		if (metricsInFlight) return;
 		metricsInFlight = true;
+		
+		if (cloudflareConfigured === null) {
+			try {
+				const settings = await api.admin.getSettings();
+				cloudflareConfigured = !!settings.cloudflare_configured;
+			} catch (e) {
+				// ignore
+			}
+		}
+
 		if (!background && !snapshot) {
 			loading = true;
 		}
@@ -100,6 +113,40 @@
 				<ErrorState title="Could not load metrics" message={error} on:retry={() => void load()} />
 			</div>
 		{/if}
+	{/if}
+
+	{#if cloudflareConfigured === false}
+		<CloudflareSetup on:success={() => { cloudflareConfigured = true; load(); }} />
+	{:else if snapshot?.analytics}
+		<div class="grid gap-4 sm:grid-cols-3 mb-4">
+			<div class="surface flex flex-col p-5">
+				<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+					<Activity class="h-4 w-4" /> Total Requests
+				</div>
+				<div class="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+					{snapshot.analytics.total_requests.toLocaleString()}
+				</div>
+				<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Last 24 hours (Cloudflare)</div>
+			</div>
+			<div class="surface flex flex-col p-5">
+				<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+					<Globe class="h-4 w-4" /> Bandwidth
+				</div>
+				<div class="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+					{(snapshot.analytics.bandwidth / (1024 * 1024)).toFixed(2)} MB
+				</div>
+				<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Data transfer (Cloudflare)</div>
+			</div>
+			<div class="surface flex flex-col p-5">
+				<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+					<AlertTriangle class="h-4 w-4 {snapshot.analytics.errors > 0 ? 'text-amber-500' : ''}" /> Edge Errors
+				</div>
+				<div class="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+					{snapshot.analytics.errors.toLocaleString()}
+				</div>
+				<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">4xx and 5xx responses</div>
+			</div>
+		</div>
 	{/if}
 
 	{#if loading && !primary}

@@ -136,7 +136,18 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 		httpx.DomainError(w, err)
 		return
 	}
-	httpx.JSON(w, http.StatusOK, MetricsSnapshotFromContainers(metrics))
+	
+	resp := MetricsSnapshotFromContainers(metrics)
+	cfData, _ := h.service.CloudflareAnalytics(r.Context(), id)
+	if cfData != nil {
+		resp.Analytics = &CloudflareAnalytics{
+			TotalRequests: cfData.TotalRequests,
+			Bandwidth:     cfData.Bandwidth,
+			Errors:        cfData.Errors,
+		}
+	}
+	
+	httpx.JSON(w, http.StatusOK, resp)
 }
 
 func (h *Handler) ComposeResources(w http.ResponseWriter, r *http.Request) {
