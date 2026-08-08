@@ -87,6 +87,7 @@ func main() {
 		mcp.WithString("deployMode", mcp.Required(), mcp.Description("Deploy mode: 'dockerfile', 'compose', or 'static'")),
 		mcp.WithString("resourceProfile", mcp.Description("Resource profile: 'static', 'go-small', 'node-python', 'compose-main', 'custom' (default: 'go-small')")),
 		mcp.WithNumber("appPort", mcp.Description("Port the app listens on (default: 3000, 80 for static)")),
+		mcp.WithBoolean("sharedPostgres", mcp.Description("Whether to provision a shared Postgres database (default: true)")),
 	)
 	s.AddTool(createProjectTool, createProjectHandler)
 
@@ -220,6 +221,11 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 		appPort = 80
 	}
 
+	sharedPostgres, ok := args["sharedPostgres"].(bool)
+	if !ok {
+		sharedPostgres = true // default to true
+	}
+
 	payload := map[string]interface{}{
 		"name":            name,
 		"repoUrl":         repoUrl,
@@ -227,7 +233,7 @@ func createProjectHandler(ctx context.Context, request mcp.CallToolRequest) (*mc
 		"deployMode":      deployMode,
 		"resourceProfile": resourceProfile,
 		"appPort":         appPort,
-		"sharedPostgres":  false,
+		"sharedPostgres":  sharedPostgres,
 	}
 
 	body, _ := json.Marshal(payload)

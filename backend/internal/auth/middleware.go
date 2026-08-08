@@ -28,8 +28,12 @@ func Middleware(tokens *TokenService, queries *db.Queries, cfg *config.Config) f
 			}
 
 			if cfg != nil && cfg.ApiToken != "" && raw == cfg.ApiToken {
-				// Bypass JWT validation and impersonate system user
-				user, err := resolveSystemUser(r.Context(), queries)
+				// Bypass JWT validation and impersonate the owner
+				if cfg.OwnerEmail == "" {
+					httpx.DomainError(w, errs.ErrUnauthorized)
+					return
+				}
+				user, err := resolveOwnerUser(r.Context(), queries, cfg.OwnerEmail)
 				if err != nil {
 					httpx.DomainError(w, err)
 					return
@@ -67,20 +71,18 @@ func Middleware(tokens *TokenService, queries *db.Queries, cfg *config.Config) f
 	}
 }
 
-const systemUserEmail = "api-client@mypaas.internal"
-
-// resolveSystemUser looks up the system user by email, creating it if it doesn't exist.
-func resolveSystemUser(ctx context.Context, queries *db.Queries) (db.User, error) {
-	user, err := queries.GetUserByEmail(ctx, systemUserEmail)
+// resolveOwnerUser looks up the owner user by email.
+func resolveOwnerUser(ctx context.Context, queries *db.Queries, email string) (db.User, error) {
+	user, err := queries.GetUserByEmail(ctx, email)
 	if err == nil {
 		return user, nil
 	}
 	if err != pgx.ErrNoRows {
 		return db.User{}, err
 	}
-	// Auto-create the system user on first API token usage
+	// Auto-create the owner user if they haven't logged in yet
 	return queries.CreateUser(ctx, db.CreateUserParams{
-		Email:          systemUserEmail,
+		Email:          email,
 		GithubID:       nil,
 		GithubUsername: nil,
 		AvatarUrl:      nil,
