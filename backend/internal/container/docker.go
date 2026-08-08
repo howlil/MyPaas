@@ -120,7 +120,7 @@ func (d *DockerCLI) StackExists(ctx context.Context, name, mode string) bool {
 }
 
 func (d *DockerCLI) Stop(ctx context.Context, name string) error {
-	return runIgnoreNotFound(ctx, "docker", "stop", "--timeout", "30", name)
+	return runIgnoreNotFound(ctx, "docker", "stop", "--time", "30", name)
 }
 
 func (d *DockerCLI) Start(ctx context.Context, name string) error {
@@ -258,7 +258,7 @@ func (d *DockerCLI) StopComposeProject(ctx context.Context, projectName string) 
 	if err != nil {
 		return err
 	}
-	return runSimple(ctx, "docker", append([]string{"stop", "--timeout", "30"}, ids...)...)
+	return runSimple(ctx, "docker", append([]string{"stop", "--time", "30"}, ids...)...)
 }
 
 func (d *DockerCLI) StartComposeProject(ctx context.Context, projectName string) error {
