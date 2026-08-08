@@ -18,7 +18,7 @@ import (
 	"mypaas/internal/errs"
 )
 
-const runtimeUsageTimeout = 1200 * time.Millisecond
+const runtimeUsageTimeout = 2500 * time.Millisecond
 
 type Service struct {
 	queries *db.Queries
@@ -141,19 +141,46 @@ func (s *Service) runtimeUsage(ctx context.Context, userID uuid.UUID) (int32, fl
 	if err != nil {
 		return 0, 0
 	}
+
+	type result struct {
+		mem int32
+		cpu float64
+	}
+	results := make(chan result, len(projects))
+
+	for _, p := range projects {
+		if p.Status != "running" {
+			continue
+		}
+		go func(project db.Project) {
+			metrics, err := s.projectMetrics(ctx, project)
+			if err != nil {
+				results <- result{0, 0}
+				return
+			}
+			results <- result{
+				mem: int32(math.Round(metrics.MemoryMB)),
+				cpu: metrics.CPUPercent,
+			}
+		}(p)
+	}
+
 	var memoryMb int32
 	var cpuPercent float64
-	for _, project := range projects {
-		if project.Status != "running" {
-			continue
+	
+	runningCount := 0
+	for _, p := range projects {
+		if p.Status == "running" {
+			runningCount++
 		}
-		metrics, err := s.projectMetrics(ctx, project)
-		if err != nil {
-			continue
-		}
-		memoryMb += int32(math.Round(metrics.MemoryMB))
-		cpuPercent += metrics.CPUPercent
 	}
+
+	for i := 0; i < runningCount; i++ {
+		res := <-results
+		memoryMb += res.mem
+		cpuPercent += res.cpu
+	}
+
 	return memoryMb, cpuPercent
 }
 
