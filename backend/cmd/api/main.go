@@ -157,7 +157,7 @@ func run() error {
 func buildRouter(cfg *config.Config, pool *pgxpool.Pool, tokenService *auth.TokenService, cipher *crypto.AESGCM) http.Handler {
 	queries := db.New(pool)
 	authHandler := auth.NewHandler(cfg, queries, tokenService)
-	authMiddleware := auth.Middleware(tokenService, queries)
+	authMiddleware := auth.Middleware(tokenService, queries, cfg)
 	auditService := audit.NewService(queries)
 	auditHandler := audit.NewHandler(auditService)
 	auditMiddleware := audit.Middleware(auditService)

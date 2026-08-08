@@ -6,12 +6,13 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"mypaas/internal/config"
 	"mypaas/internal/db"
 	"mypaas/internal/errs"
 	"mypaas/internal/httpx"
 )
 
-func Middleware(tokens *TokenService, queries *db.Queries) func(http.Handler) http.Handler {
+func Middleware(tokens *TokenService, queries *db.Queries, cfg *config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			raw := bearerToken(r)
@@ -22,6 +23,16 @@ func Middleware(tokens *TokenService, queries *db.Queries) func(http.Handler) ht
 			}
 			if raw == "" {
 				httpx.DomainError(w, errs.ErrUnauthorized)
+				return
+			}
+
+			if cfg != nil && cfg.ApiToken != "" && raw == cfg.ApiToken {
+				// Bypass JWT validation and impersonate owner
+				next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), User{
+					ID:    0,
+					Email: "api-client@mypaas.internal",
+					Role:  "owner",
+				})))
 				return
 			}
 

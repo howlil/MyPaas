@@ -20,6 +20,8 @@ type Config struct {
 	GitHubClientSecret string
 	GitHubCallbackURL  string
 
+	ApiToken string
+
 	EncryptionKey string
 
 	DockerSocket      string
@@ -148,6 +150,8 @@ func Load() (*Config, error) {
 		GitHubClientID:     req("GITHUB_CLIENT_ID"),
 		GitHubClientSecret: req("GITHUB_CLIENT_SECRET"),
 		GitHubCallbackURL:  req("GITHUB_CALLBACK_URL"),
+
+		ApiToken: envStr("MYPAAS_API_TOKEN", ""),
 
 		EncryptionKey: req("ENCRYPTION_KEY"),
 
