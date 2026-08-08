@@ -20,9 +20,16 @@ func NewCloudflareClient(cfg *config.Config) *CloudflareClient {
 }
 
 type MetricsData struct {
-	TotalRequests int `json:"total_requests"`
-	Bandwidth     int `json:"bandwidth"`
-	Errors        int `json:"errors"`
+	TotalRequests int                  `json:"total_requests"`
+	Bandwidth     int                  `json:"bandwidth"`
+	Errors        int                  `json:"errors"`
+	Timeseries    []TimeseriesDataPoint `json:"timeseries"`
+}
+
+type TimeseriesDataPoint struct {
+	Timestamp string `json:"timestamp"`
+	Requests  int    `json:"requests"`
+	Bandwidth int    `json:"bandwidth"`
 }
 
 func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain string) (*MetricsData, error) {
@@ -52,6 +59,19 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 						}
 					) {
 						count
+					}
+					timeseries: httpRequestsAdaptiveGroups(
+						limit: 24,
+						filter: {clientRequestHTTPHost: $host, datetime_geq: $datetime},
+						orderBy: [datetimeHour_ASC]
+					) {
+						dimensions {
+							datetimeHour
+						}
+						count
+						sum {
+							edgeResponseBytes
+						}
 					}
 				}
 			}
@@ -99,6 +119,15 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 					Errors []struct {
 						Count int `json:"count"`
 					} `json:"errors"`
+					Timeseries []struct {
+						Dimensions struct {
+							DatetimeHour string `json:"datetimeHour"`
+						} `json:"dimensions"`
+						Count int `json:"count"`
+						Sum   struct {
+							EdgeResponseBytes int `json:"edgeResponseBytes"`
+						} `json:"sum"`
+					} `json:"timeseries"`
 				} `json:"zones"`
 			} `json:"viewer"`
 		} `json:"data"`
@@ -114,6 +143,7 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 	}
 
 	var data MetricsData
+	data.Timeseries = make([]TimeseriesDataPoint, 0)
 	if len(payload.Data.Viewer.Zones) > 0 {
 		zone := payload.Data.Viewer.Zones[0]
 		for _, g := range zone.HttpRequestsAdaptiveGroups {
@@ -122,6 +152,13 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 		}
 		for _, g := range zone.Errors {
 			data.Errors += g.Count
+		}
+		for _, t := range zone.Timeseries {
+			data.Timeseries = append(data.Timeseries, TimeseriesDataPoint{
+				Timestamp: t.Dimensions.DatetimeHour,
+				Requests:  t.Count,
+				Bandwidth: t.Sum.EdgeResponseBytes,
+			})
 		}
 	}
 

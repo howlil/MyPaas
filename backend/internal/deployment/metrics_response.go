@@ -13,9 +13,16 @@ type MetricsSnapshotResponse struct {
 }
 
 type CloudflareAnalytics struct {
-	TotalRequests int `json:"total_requests"`
-	Bandwidth     int `json:"bandwidth"`
-	Errors        int `json:"errors"`
+	TotalRequests int                   `json:"total_requests"`
+	Bandwidth     int                   `json:"bandwidth"`
+	Errors        int                   `json:"errors"`
+	Timeseries    []TimeseriesDataPoint `json:"timeseries"`
+}
+
+type TimeseriesDataPoint struct {
+	Timestamp string `json:"timestamp"`
+	Requests  int    `json:"requests"`
+	Bandwidth int    `json:"bandwidth"`
 }
 
 type ContainerMetricsResponse struct {

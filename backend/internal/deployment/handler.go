@@ -140,10 +140,20 @@ func (h *Handler) Metrics(w http.ResponseWriter, r *http.Request) {
 	resp := MetricsSnapshotFromContainers(metrics)
 	cfData, _ := h.service.CloudflareAnalytics(r.Context(), id)
 	if cfData != nil {
+		ts := make([]TimeseriesDataPoint, len(cfData.Timeseries))
+		for i, t := range cfData.Timeseries {
+			ts[i] = TimeseriesDataPoint{
+				Timestamp: t.Timestamp,
+				Requests:  t.Requests,
+				Bandwidth: t.Bandwidth,
+			}
+		}
+
 		resp.Analytics = &CloudflareAnalytics{
 			TotalRequests: cfData.TotalRequests,
 			Bandwidth:     cfData.Bandwidth,
 			Errors:        cfData.Errors,
+			Timeseries:    ts,
 		}
 	}
 	
