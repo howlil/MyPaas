@@ -80,7 +80,7 @@ func main() {
 
 	// Tool: create_project
 	createProjectTool := mcp.NewTool("create_project",
-		mcp.WithDescription("Create a new project in MyPaas from a Git repository"),
+		mcp.WithDescription("Create a new project in MyPaas from a Git repository. AGENT INSTRUCTION: Before calling, analyze the repo to infer parameters:\n1. deployMode: 'compose' (if docker-compose.yml exists), 'dockerfile' (if Dockerfile exists), or 'static' (plain HTML/JS).\n2. resourceProfile: 'compose-main' (for compose), 'node-python' (Node/Python/PHP), 'go-small' (Go), or 'static'.\n3. sharedPostgres: true ONLY if the app explicitly requires a PostgreSQL database (e.g., uses DATABASE_URL).\n4. appPort: The port the app listens on internally (check EXPOSE in Dockerfile or server code)."),
 		mcp.WithString("name", mcp.Required(), mcp.Description("Name of the project (e.g., my-awesome-app)")),
 		mcp.WithString("repoUrl", mcp.Required(), mcp.Description("GitHub Repository URL (e.g., https://github.com/user/repo)")),
 		mcp.WithString("branch", mcp.Required(), mcp.Description("Git branch to deploy (e.g., main)")),
