@@ -31,12 +31,12 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 	}
 
 	query := `
-		query GetZoneAnalytics($zoneTag: string, $host: string) {
+		query GetZoneAnalytics($zoneTag: string, $host: string, $date: string) {
 			viewer {
 				zones(filter: {zoneTag: $zoneTag}) {
 					httpRequests1dGroups(
-						limit: 1,
-						filter: {clientRequestHTTPHost: $host}
+						limit: 2,
+						filter: {clientRequestHTTPHost: $host, date_geq: $date}
 					) {
 						sum {
 							requests
@@ -44,9 +44,10 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 						}
 					}
 					errors: httpRequests1dGroups(
-						limit: 1,
+						limit: 2,
 						filter: {
 							clientRequestHTTPHost: $host,
+							date_geq: $date,
 							edgeResponseStatus_gt: 399
 						}
 					) {
@@ -64,6 +65,7 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 		"variables": map[string]string{
 			"zoneTag": c.cfg.CloudflareZoneID,
 			"host":    subdomain,
+			"date":    time.Now().Add(-24 * time.Hour).Format("2006-01-02"),
 		},
 	}
 
@@ -118,12 +120,12 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 	var data MetricsData
 	if len(payload.Data.Viewer.Zones) > 0 {
 		zone := payload.Data.Viewer.Zones[0]
-		if len(zone.HttpRequests1dGroups) > 0 {
-			data.TotalRequests = zone.HttpRequests1dGroups[0].Sum.Requests
-			data.Bandwidth = zone.HttpRequests1dGroups[0].Sum.Bytes
+		for _, g := range zone.HttpRequests1dGroups {
+			data.TotalRequests += g.Sum.Requests
+			data.Bandwidth += g.Sum.Bytes
 		}
-		if len(zone.Errors) > 0 {
-			data.Errors = zone.Errors[0].Sum.Requests
+		for _, g := range zone.Errors {
+			data.Errors += g.Sum.Requests
 		}
 	}
 
