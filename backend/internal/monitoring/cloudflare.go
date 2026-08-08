@@ -63,7 +63,7 @@ func (c *CloudflareClient) GetProjectMetrics(ctx context.Context, subdomain stri
 		"variables": map[string]string{
 			"zoneTag":  c.cfg.CloudflareZoneID,
 			"host":     subdomain,
-			"datetime": time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
+			"datetime": time.Now().Add(-23 * time.Hour).Format(time.RFC3339),
 		},
 	}
 
