@@ -10,7 +10,8 @@
 	import CloudflareSetup from './CloudflareSetup.svelte';
 	import { api } from '$api';
 	import type { MetricsSnapshot } from '$types';
-	import { Globe, Activity, AlertTriangle } from '@lucide/svelte';
+	import { Globe, Activity, AlertTriangle, TrendingUp } from '@lucide/svelte';
+	import CloudflareChart from '$components/CloudflareChart.svelte';
 
 	let snapshot: MetricsSnapshot | null = null;
 	let cloudflareConfigured: boolean | null = null;
@@ -118,35 +119,51 @@
 	{#if cloudflareConfigured === false}
 		<CloudflareSetup on:success={() => { cloudflareConfigured = true; load(); }} />
 	{:else if snapshot?.analytics}
-		<div class="grid gap-4 sm:grid-cols-3 mb-4">
-			<div class="surface flex flex-col p-5">
-				<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
-					<Activity class="h-4 w-4" /> Total Requests
+		<SectionPanel
+			title="Cloudflare Analytics"
+			description="Edge network metrics over the last 24 hours."
+			contentClass="p-0"
+		>
+			<div class="grid grid-cols-1 divide-y divide-gray-100 dark:divide-gray-800 lg:grid-cols-4 lg:divide-x lg:divide-y-0">
+				<div class="col-span-1 flex flex-col p-5">
+					<div class="space-y-6">
+						<div>
+							<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+								<Activity class="h-4 w-4" /> Total Requests
+							</div>
+							<div class="mt-1 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+								{snapshot.analytics.total_requests.toLocaleString()}
+							</div>
+						</div>
+						<div>
+							<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+								<Globe class="h-4 w-4" /> Bandwidth
+							</div>
+							<div class="mt-1 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+								{(snapshot.analytics.bandwidth / (1024 * 1024)).toFixed(2)} MB
+							</div>
+						</div>
+						<div>
+							<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+								<AlertTriangle class="h-4 w-4 {snapshot.analytics.errors > 0 ? 'text-amber-500' : ''}" /> Edge Errors
+							</div>
+							<div class="mt-1 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
+								{snapshot.analytics.errors.toLocaleString()}
+							</div>
+						</div>
+					</div>
 				</div>
-				<div class="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
-					{snapshot.analytics.total_requests.toLocaleString()}
+				<div class="col-span-1 p-5 lg:col-span-3">
+					{#if snapshot.analytics.timeseries?.length > 0}
+						<CloudflareChart data={snapshot.analytics.timeseries} />
+					{:else}
+						<div class="flex h-64 items-center justify-center rounded-md border border-dashed border-gray-200 dark:border-gray-800">
+							<span class="text-sm text-gray-500">Not enough data to display timeseries</span>
+						</div>
+					{/if}
 				</div>
-				<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Last 24 hours (Cloudflare)</div>
 			</div>
-			<div class="surface flex flex-col p-5">
-				<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
-					<Globe class="h-4 w-4" /> Bandwidth
-				</div>
-				<div class="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
-					{(snapshot.analytics.bandwidth / (1024 * 1024)).toFixed(2)} MB
-				</div>
-				<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">Data transfer (Cloudflare)</div>
-			</div>
-			<div class="surface flex flex-col p-5">
-				<div class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
-					<AlertTriangle class="h-4 w-4 {snapshot.analytics.errors > 0 ? 'text-amber-500' : ''}" /> Edge Errors
-				</div>
-				<div class="mt-2 text-3xl font-bold tracking-tight text-gray-950 dark:text-white">
-					{snapshot.analytics.errors.toLocaleString()}
-				</div>
-				<div class="mt-1 text-xs text-gray-500 dark:text-gray-400">4xx and 5xx responses</div>
-			</div>
-		</div>
+		</SectionPanel>
 	{/if}
 
 	{#if loading && !primary}
