@@ -124,11 +124,11 @@ func (d *DockerCLI) Stop(ctx context.Context, name string) error {
 }
 
 func (d *DockerCLI) Start(ctx context.Context, name string) error {
-	return runSimple(ctx, "docker", "start", name)
+	return runRequireContainer(ctx, "docker", "start", name)
 }
 
 func (d *DockerCLI) Restart(ctx context.Context, name string) error {
-	return runSimple(ctx, "docker", "restart", name)
+	return runRequireContainer(ctx, "docker", "restart", name)
 }
 
 func (d *DockerCLI) Rename(ctx context.Context, oldName, newName string) error {
@@ -684,9 +684,19 @@ func runIgnoreNotFound(ctx context.Context, name string, args ...string) error {
 	if err == nil {
 		return nil
 	}
-	msg := err.Error()
-	if strings.Contains(msg, "No such container") || strings.Contains(msg, "not found") {
+	if isNoContainerMessage(err.Error()) {
 		return nil
+	}
+	return err
+}
+
+func runRequireContainer(ctx context.Context, name string, args ...string) error {
+	err := runSimple(ctx, name, args...)
+	if err == nil {
+		return nil
+	}
+	if isNoContainerMessage(err.Error()) {
+		return ErrNoContainer
 	}
 	return err
 }

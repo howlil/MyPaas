@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"mypaas/internal/container"
 	"mypaas/internal/errs"
 )
 
@@ -62,6 +63,8 @@ func DomainError(w http.ResponseWriter, err error) {
 		Error(w, http.StatusBadRequest, "COMPOSE_UNSUPPORTED", "This action is not supported for Compose projects yet.", nil)
 	case errors.Is(err, errs.ErrDockerfileNotFound):
 		Error(w, http.StatusBadRequest, "DOCKERFILE_NOT_FOUND", "Dockerfile was not found in the repository root.", nil)
+	case errors.Is(err, container.ErrNoContainer):
+		Error(w, http.StatusBadRequest, "NO_CONTAINER", "Container not found. The project might be deploying or the previous deployment failed.", nil)
 	case errors.Is(err, errs.ErrNoDeployConfig):
 		message := strings.TrimPrefix(err.Error(), errs.ErrNoDeployConfig.Error()+": ")
 		if message == err.Error() {

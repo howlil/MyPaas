@@ -39,6 +39,10 @@ func (c *Client) AddRoute(ctx context.Context, host string, port int32) error {
 			"upstreams": []map[string]any{{
 				"dial": fmt.Sprintf("%s:%d", c.upstreamHost, port),
 			}},
+			"load_balancing": map[string]any{
+				"try_duration": "10s",
+				"try_interval": "250ms",
+			},
 		}},
 		"terminal": true,
 	})
