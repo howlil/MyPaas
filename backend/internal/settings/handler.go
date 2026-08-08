@@ -45,16 +45,23 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 
 	merged := h.defaults()
+	res := make(map[string]interface{})
+	for k, v := range merged {
+		res[k] = v
+	}
+
 	for key, raw := range overrides {
 		if _, ok := merged[key]; ok {
 			var v float64
 			if json.Unmarshal(raw, &v) == nil {
-				merged[key] = v
+				res[key] = v
 			}
 		}
 	}
 
-	httpx.JSON(w, http.StatusOK, merged)
+	res["mcp_api_token"] = h.cfg.ApiToken
+
+	httpx.JSON(w, http.StatusOK, res)
 }
 
 // Update upserts one or more platform settings and applies them to the

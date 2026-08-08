@@ -16,6 +16,7 @@
 		project_default_cpu: 0,
 		build_timeout_minutes: 0
 	};
+	let mcpToken = '';
 	let loadingSettings = true;
 	let savingSettings = false;
 
@@ -45,7 +46,9 @@
 	async function loadSettings() {
 		try {
 			const data = await api.admin.getSettings();
-			settings = { ...settings, ...data };
+			mcpToken = data.mcp_api_token ?? '';
+			delete data.mcp_api_token;
+			settings = { ...settings, ...(data as Record<string, number>) };
 		} catch (error) {
 			toast.error('Failed to load settings');
 			console.error(error);
@@ -59,7 +62,7 @@
 		savingSettings = true;
 		try {
 			const updated = await api.admin.updateSettings(settings);
-			settings = { ...settings, ...updated };
+			settings = { ...settings, ...(updated as Record<string, number>) };
 			toast.success('Settings saved successfully');
 		} catch (error) {
 			toast.error('Failed to save settings');
@@ -144,7 +147,7 @@
 	<title>Admin Settings - MyPaas</title>
 </svelte:head>
 
-<div class="page-shell max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+<div class="page-shell py-6">
 	<PageHeader title="Platform Settings" description="Manage platform configurations and migrations" />
 
 	<SectionPanel title="Resource Configuration" description="Configure default platform limits and resource quotas." className="mb-8">
@@ -175,6 +178,41 @@
 				Save Changes
 			</ActionButton>
 		</svelte:fragment>
+	</SectionPanel>
+
+	<SectionPanel title="AI Agent Integration (MCP)" description="Connect an AI Agent to MyPaas using the Model Context Protocol." className="mb-8">
+		<div class="space-y-4">
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				Use this API Token to authenticate your MCP server with the MyPaas backend. The MCP server can deploy projects, view statuses, and manage your platform automatically.
+			</p>
+			
+			<div class="space-y-1.5">
+				<label for="mcp_token" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
+					MCP API Token
+				</label>
+				<div class="flex max-w-lg items-center gap-2">
+					<input
+						type="text"
+						id="mcp_token"
+						readonly
+						value={mcpToken || 'Not configured in .env'}
+						class="field block w-full rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-500 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-400"
+					/>
+					{#if mcpToken}
+						<ActionButton variant="secondary" size="md" on:click={() => copyToClipboard(mcpToken, 'mcp_token')}>
+							{#if copiedText === 'mcp_token'}
+								<Check class="h-4 w-4" />
+							{:else}
+								<Copy class="h-4 w-4" />
+							{/if}
+						</ActionButton>
+					{/if}
+				</div>
+				<p class="mt-2 text-xs text-gray-500">
+					To change this token, edit <code>MYPAAS_API_TOKEN</code> in your <code>.env</code> file on the server and restart the backend.
+				</p>
+			</div>
+		</div>
 	</SectionPanel>
 
 	<SectionPanel title="VM Migration" description="Migrate your entire MyPaas installation to a new server.">
