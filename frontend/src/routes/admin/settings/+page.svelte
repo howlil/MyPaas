@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { Check, Copy, Download, Loader2, AlertTriangle, Package } from '@lucide/svelte';
+	import { Check, Copy, Download, Loader2, AlertTriangle, Package, RefreshCw } from '@lucide/svelte';
 	import { api, type MigrationStatus } from '$api';
 	import { toast } from '$stores/toast';
 	import PageHeader from '$components/PageHeader.svelte';
@@ -19,6 +19,7 @@
 	let mcpToken = '';
 	let loadingSettings = true;
 	let savingSettings = false;
+	let regeneratingToken = false;
 
 	let migration: MigrationStatus | null = null;
 	let preparingMigration = false;
@@ -69,6 +70,21 @@
 			console.error(error);
 		} finally {
 			savingSettings = false;
+		}
+	}
+
+	async function regenerateToken() {
+		if (!confirm('Are you sure you want to regenerate the MCP Token? Any existing AI agent using this token will lose access until updated.')) return;
+		regeneratingToken = true;
+		try {
+			const data = await api.admin.regenerateMCPToken();
+			mcpToken = data.mcp_api_token ?? '';
+			toast.success('MCP Token regenerated successfully');
+		} catch (error) {
+			toast.error('Failed to regenerate token');
+			console.error(error);
+		} finally {
+			regeneratingToken = false;
 		}
 	}
 
@@ -207,9 +223,13 @@
 							{/if}
 						</ActionButton>
 					{/if}
+					<ActionButton variant="secondary" size="md" on:click={regenerateToken} loading={regeneratingToken}>
+						<RefreshCw class="mr-2 h-4 w-4" />
+						Generate
+					</ActionButton>
 				</div>
 				<p class="mt-2 text-xs text-gray-500">
-					To change this token, edit <code>MYPAAS_API_TOKEN</code> in your <code>.env</code> file on the server and restart the backend.
+					This token is saved automatically to the <code>MYPAAS_API_TOKEN</code> environment variable.
 				</p>
 			</div>
 		</div>

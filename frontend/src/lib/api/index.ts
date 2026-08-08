@@ -173,6 +173,8 @@ export const api = {
 		getSettings: (): Promise<Record<string, number> & { mcp_api_token?: string }> => request('/admin/settings'),
 		updateSettings: (d: Record<string, number>): Promise<Record<string, number>> =>
 			request('/admin/settings', { method: 'PUT', body: JSON.stringify(d) }),
+		regenerateMCPToken: (): Promise<Record<string, number> & { mcp_api_token?: string }> =>
+			request('/admin/settings/mcp-token/regenerate', { method: 'POST' }),
 		prepareMigration: (): Promise<MigrationStatus> =>
 			request('/admin/migrate/prepare', { method: 'POST' }),
 		migrationStatus: (id: string): Promise<MigrationStatus> =>

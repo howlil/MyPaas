@@ -272,7 +272,7 @@
 		<ErrorState title="Could not load settings" message={loadError || 'Project not found'} on:retry={() => void load()} />
 	</div>
 {:else if project}
-	<div class="space-y-4 max-w-5xl">
+	<div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
 		<div class="space-y-4">
 			<SectionPanel
 				title="General"

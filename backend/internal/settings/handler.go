@@ -1,8 +1,14 @@
 package settings
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"mypaas/internal/config"
 	"mypaas/internal/db"
@@ -62,6 +68,64 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	res["mcp_api_token"] = h.cfg.ApiToken
 
 	httpx.JSON(w, http.StatusOK, res)
+}
+
+func (h *Handler) RegenerateMCPToken(w http.ResponseWriter, r *http.Request) {
+	randBytes := make([]byte, 24)
+	rand.Read(randBytes)
+	newToken := "mp_" + hex.EncodeToString(randBytes)
+
+	err := updateEnvFile("MYPAAS_API_TOKEN", newToken)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "ENV_WRITE_FAILED", "Failed to write .env file: "+err.Error(), nil)
+		return
+	}
+
+	h.cfg.ApiToken = newToken
+	h.Get(w, r)
+}
+
+func updateEnvFile(key, value string) error {
+	var envPath string
+	if configDir := os.Getenv("MYPAAS_CONFIG_DIR"); configDir != "" {
+		envPath = filepath.Join(configDir, ".env")
+	} else {
+		for _, p := range []string{".env", "../.env", "../../.env", "../../../.env"} {
+			if _, err := os.Stat(p); err == nil {
+				envPath = p
+				break
+			}
+		}
+	}
+	if envPath == "" {
+		envPath = ".env" // Fallback to current directory
+	}
+
+	content, err := os.ReadFile(envPath)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+
+	var lines []string
+	if len(content) > 0 {
+		lines = strings.Split(string(content), "\n")
+	}
+	found := false
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), key+"=") {
+			lines[i] = fmt.Sprintf("%s=%q", key, value)
+			found = true
+			break
+		}
+	}
+	if !found {
+		if len(lines) > 0 && lines[len(lines)-1] != "" {
+			lines = append(lines, "")
+		}
+		lines = append(lines, fmt.Sprintf("%s=%q", key, value))
+	}
+
+	return os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0600)
 }
 
 // Update upserts one or more platform settings and applies them to the
