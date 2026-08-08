@@ -102,3 +102,9 @@ coverage.out
 
 # Local config
 settings.local.json
+backend/tmp_build
+backend/cftest*.go
+docs/MANUAL_TESTING.md
+backend/tmp_build
+backend/cftest*.go
+docs/MANUAL_TESTING.md
