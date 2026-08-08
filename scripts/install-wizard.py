@@ -845,7 +845,7 @@ def success_html() -> bytes:
 
 def main() -> None:
     server = HTTPServer((HOST, PORT), Handler)
-    print(f"Install wizard listening on http://{HOST}:{PORT}/?token={TOKEN}")
+    # Output is handled by run-install-wizard.sh to avoid confusing local loopback URLs
     server.serve_forever()
 
 
