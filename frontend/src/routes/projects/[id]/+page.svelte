@@ -26,13 +26,16 @@
 		? Math.min((primaryMetric.memoryMb / primaryMetric.memoryLimitMb) * 100, 100)
 		: 0;
 	$: cpuPercent = primaryMetric ? Math.min(primaryMetric.cpu, 100) : 0;
-	$: statusTone = (project?.status === 'running'
+	$: derivedStatus = (lastDeploy?.status === 'queued' || lastDeploy?.status === 'building')
+		? lastDeploy.status
+		: (project?.status ?? 'pending');
+	$: statusTone = (derivedStatus === 'running'
 		? 'success'
-		: project?.status === 'building'
+		: derivedStatus === 'building' || derivedStatus === 'queued'
 			? 'warning'
-			: project?.status === 'crashed'
+			: derivedStatus === 'crashed'
 				? 'danger'
-				: project?.status === 'pending'
+				: derivedStatus === 'pending'
 					? 'info'
 					: 'neutral') as Tone;
 	$: lastDeployCommit = lastDeploy?.commitSha?.slice(0, 8) ?? '-';
@@ -152,8 +155,8 @@
 		{/if}
 
 		<div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-			<StatTile label="Project status" value={titleCase(project.status)} detail={metricsUpdatedLabel} tone={statusTone}>
-				<StatusBadge status={project.status} pulse />
+			<StatTile label="Project status" value={titleCase(derivedStatus)} detail={metricsUpdatedLabel} tone={statusTone}>
+				<StatusBadge status={derivedStatus} pulse />
 			</StatTile>
 			<StatTile label="Uptime" value={primaryMetric?.uptime ?? '-'} detail={primaryMetric?.service ?? 'No live container'} tone="info" />
 			<StatTile

@@ -60,11 +60,15 @@
 	$: memoryRuntimePercent = quota && quota.memoryUsedMb > 0 ? Math.min(100, (quota.memoryRuntimeMb / quota.memoryUsedMb) * 100) : 0;
 	$: cpuConfiguredPercent = quota && quota.cpuLimit > 0 ? Math.min(100, (quota.cpuUsed / quota.cpuLimit) * 100) : 0;
 	$: projectPercent = quota && quota.projectLimit > 0 ? Math.min(100, (quota.projectCount / quota.projectLimit) * 100) : 0;
-	$: runningCount = projects.filter((project) => project.status === 'running').length;
-	$: buildingCount = projects.filter((project) => project.status === 'building').length;
-	$: issueCount = projects.filter((project) => project.status === 'crashed').length;
-	$: stoppedCount = projects.filter((project) => project.status === 'stopped').length;
-	$: pendingCount = projects.filter((project) => project.status === 'pending').length;
+	$: getDerivedStatus = (project: Project) => {
+		if (project.status === 'running' && projectUptimes[project.id] === '-') return 'crashed';
+		return project.status;
+	};
+	$: runningCount = projects.filter((project) => getDerivedStatus(project) === 'running').length;
+	$: buildingCount = projects.filter((project) => getDerivedStatus(project) === 'building').length;
+	$: issueCount = projects.filter((project) => getDerivedStatus(project) === 'crashed').length;
+	$: stoppedCount = projects.filter((project) => getDerivedStatus(project) === 'stopped').length;
+	$: pendingCount = projects.filter((project) => getDerivedStatus(project) === 'pending').length;
 	$: dockerfileCount = projects.filter((project) => project.deployMode === 'dockerfile').length;
 	$: composeCount = projects.filter((project) => project.deployMode === 'compose').length;
 	$: staticCount = projects.filter((project) => project.deployMode === 'static').length;
@@ -133,9 +137,10 @@
 	}
 
 	function projectPrimaryAction(project: Project): 'start' | 'stop' | 'deploy' | 'busy' {
-		if (project.status === 'building') return 'busy';
-		if (project.status === 'running') return 'stop';
-		if (project.status === 'stopped') return 'start';
+		const status = getDerivedStatus(project);
+		if (status === 'building') return 'busy';
+		if (status === 'running') return 'stop';
+		if (status === 'stopped' || status === 'crashed') return 'start';
 		return 'deploy';
 	}
 
@@ -468,7 +473,7 @@
 							{project.subdomain}
 						</p>
 					</div>
-					<div><StatusBadge status={project.status} pulse /></div>
+					<div><StatusBadge status={getDerivedStatus(project)} pulse /></div>
 					<a href={appUrl(project)} target="_blank" rel="noopener" class="truncate font-mono text-xs text-gray-600 hover:text-gray-950 hover:underline dark:text-gray-300 dark:hover:text-white">
 						{appUrl(project).replace(/^https?:\/\//, '')}
 					</a>
