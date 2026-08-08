@@ -29,9 +29,10 @@ def e2e_audit():
 
     def api_request(method, endpoint, data=None):
         url = f"{api_url}{endpoint}"
-        req = urllib.request.Request(url, method=method, headers=headers)
-        if data:
-            req.data = json.dumps(data).encode("utf-8")
+        data_bytes = None
+        if data is not None:
+            data_bytes = json.dumps(data).encode("utf-8")
+        req = urllib.request.Request(url, method=method, headers=headers, data=data_bytes)
         try:
             with urllib.request.urlopen(req) as response:
                 return json.loads(response.read().decode("utf-8")), response.status
@@ -52,7 +53,7 @@ def e2e_audit():
     print("[2/5] Creating a test static project...")
     project_payload = {
         "name": "audit-test-static",
-        "repo_url": "https://github.com/nabilrn/mypaas-sample-static",
+        "repoUrl": "https://github.com/nabilrn/mypaas-sample-static",
         "branch": "main"
     }
     res, status = api_request("POST", "/projects", project_payload)
