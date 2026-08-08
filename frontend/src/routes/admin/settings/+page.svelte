@@ -231,6 +231,38 @@
 				<p class="mt-2 text-xs text-gray-500">
 					This token is saved automatically to the <code>MYPAAS_API_TOKEN</code> environment variable.
 				</p>
+
+				<details class="mt-4 rounded-md border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900/50">
+					<summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800/50">
+						How to connect AI Agents (Cursor, Cline, Claude Desktop)
+					</summary>
+					<div class="border-t border-gray-200 p-4 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-400">
+						<p class="mb-3">Since MyPaas runs remotely, you must run the MCP server on your local machine to securely bridge your AI agent with this server.</p>
+						<ol class="mb-4 list-decimal pl-5 space-y-1">
+							<li>Ensure you have <a href="https://go.dev/dl/" target="_blank" class="text-brand-600 hover:underline">Go</a> installed locally.</li>
+							<li>Clone the MyPaas repository to your machine if you haven't already.</li>
+							<li>Add the configuration below to your agent's MCP settings (e.g. <code>cline_mcp.json</code> or Cursor settings). Ensure you adjust the absolute path to your local clone!</li>
+						</ol>
+						
+						<div class="relative rounded-md bg-gray-900 p-4 text-left">
+							<pre class="overflow-x-auto text-xs text-gray-300"><code>{`{
+  "mcpServers": {
+    "mypaas": {
+      "command": "go",
+      "args": [
+        "run", 
+        "/absolute/path/to/MyPaas/backend/cmd/mcp/main.go"
+      ],
+      "env": {
+        "MYPAAS_URL": "${typeof window !== 'undefined' ? window.location.origin : 'https://<your-domain>'}/api",
+        "MYPAAS_API_TOKEN": "${mcpToken || '<your-token>'}"
+      }
+    }
+  }
+}`}</code></pre>
+						</div>
+					</div>
+				</details>
 			</div>
 		</div>
 	</SectionPanel>
