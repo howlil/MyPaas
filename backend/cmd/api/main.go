@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -85,6 +86,24 @@ func run() error {
 		return fmt.Errorf("crypto: %w", err)
 	}
 	queries := db.New(pool)
+	
+	// Load dynamic API tokens from database
+	if settingsRows, err := queries.GetAllSettings(context.Background()); err == nil {
+		for _, row := range settingsRows {
+			var strVal string
+			if err := json.Unmarshal(row.Value, &strVal); err == nil {
+				switch row.Key {
+				case "mypaas_api_token":
+					cfg.ApiToken = strVal
+				case "cloudflare_api_token":
+					cfg.CloudflareAPIToken = strVal
+				case "cloudflare_zone_id":
+					cfg.CloudflareZoneID = strVal
+				}
+			}
+		}
+	}
+
 	if err := seedOwner(context.Background(), queries, cfg.OwnerEmail); err != nil {
 		return fmt.Errorf("seed owner: %w", err)
 	}

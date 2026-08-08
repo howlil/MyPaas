@@ -4,11 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
 
 	"mypaas/internal/config"
 	"mypaas/internal/db"
@@ -76,9 +72,13 @@ func (h *Handler) RegenerateMCPToken(w http.ResponseWriter, r *http.Request) {
 	rand.Read(randBytes)
 	newToken := "mp_" + hex.EncodeToString(randBytes)
 
-	err := updateEnvFile("MYPAAS_API_TOKEN", newToken)
+	rawToken, _ := json.Marshal(newToken)
+	err := h.queries.UpsertSetting(r.Context(), db.UpsertSettingParams{
+		Key:   "mypaas_api_token",
+		Value: rawToken,
+	})
 	if err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "ENV_WRITE_FAILED", "Failed to write .env file: "+err.Error(), nil)
+		httpx.Error(w, http.StatusInternalServerError, "DB_WRITE_FAILED", "Failed to save token to database: "+err.Error(), nil)
 		return
 	}
 
@@ -98,12 +98,21 @@ func (h *Handler) UpdateCloudflareConfig(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := updateEnvFile("CLOUDFLARE_API_TOKEN", req.Token); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "ENV_WRITE_FAILED", "Failed to save token", nil)
+	rawToken, _ := json.Marshal(req.Token)
+	if err := h.queries.UpsertSetting(r.Context(), db.UpsertSettingParams{
+		Key:   "cloudflare_api_token",
+		Value: rawToken,
+	}); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_WRITE_FAILED", "Failed to save cloudflare token", nil)
 		return
 	}
-	if err := updateEnvFile("CLOUDFLARE_ZONE_ID", req.ZoneID); err != nil {
-		httpx.Error(w, http.StatusInternalServerError, "ENV_WRITE_FAILED", "Failed to save zone ID", nil)
+	
+	rawZone, _ := json.Marshal(req.ZoneID)
+	if err := h.queries.UpsertSetting(r.Context(), db.UpsertSettingParams{
+		Key:   "cloudflare_zone_id",
+		Value: rawZone,
+	}); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "DB_WRITE_FAILED", "Failed to save zone ID", nil)
 		return
 	}
 
@@ -111,49 +120,6 @@ func (h *Handler) UpdateCloudflareConfig(w http.ResponseWriter, r *http.Request)
 	h.cfg.CloudflareZoneID = req.ZoneID
 
 	h.Get(w, r)
-}
-
-func updateEnvFile(key, value string) error {
-	var envPath string
-	if configDir := os.Getenv("MYPAAS_CONFIG_DIR"); configDir != "" {
-		envPath = filepath.Join(configDir, ".env")
-	} else {
-		for _, p := range []string{".env", "../.env", "../../.env", "../../../.env"} {
-			if _, err := os.Stat(p); err == nil {
-				envPath = p
-				break
-			}
-		}
-	}
-	if envPath == "" {
-		envPath = ".env" // Fallback to current directory
-	}
-
-	content, err := os.ReadFile(envPath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	var lines []string
-	if len(content) > 0 {
-		lines = strings.Split(string(content), "\n")
-	}
-	found := false
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), key+"=") {
-			lines[i] = fmt.Sprintf("%s=%q", key, value)
-			found = true
-			break
-		}
-	}
-	if !found {
-		if len(lines) > 0 && lines[len(lines)-1] != "" {
-			lines = append(lines, "")
-		}
-		lines = append(lines, fmt.Sprintf("%s=%q", key, value))
-	}
-
-	return os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0600)
 }
 
 // Update upserts one or more platform settings and applies them to the
