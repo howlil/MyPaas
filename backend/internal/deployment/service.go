@@ -91,10 +91,10 @@ func (s *Service) ReconcileMissingContainers(ctx context.Context) error {
 		if !s.docker.StackExists(ctx, name, p.DeployMode) {
 			// Container/stack doesn't exist, trigger a deployment to rebuild it
 			slog.Info("reconciler: stack missing for running project, triggering deployment", "project", p.Name, "id", p.ID, "mode", p.DeployMode)
-			// Trigger as an automated system action (no user ID)
+			// Trigger as an automated system action, but use 'manual' since the DB enum only allows manual, webhook, rollback
 			deployment, err := s.queries.CreateDeployment(ctx, db.CreateDeploymentParams{
 				ProjectID:   p.ID,
-				TriggeredBy: "auto-recovery",
+				TriggeredBy: "manual",
 			})
 			if err != nil {
 				slog.Error("reconciler: failed to create deployment", "project", p.Name, "error", err)
