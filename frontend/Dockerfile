@@ -8,7 +8,8 @@ ENV NODE_OPTIONS="--max_old_space_size=1024"
 RUN corepack enable pnpm
 
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --config.onlyBuiltDependencies='["esbuild"]'
 
 COPY . .
 
