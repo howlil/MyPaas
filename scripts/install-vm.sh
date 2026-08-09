@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cleanup_advice() {
+  printf '\n=================================================================\n' >&2
+  printf '❌ INSTALLATION FAILED!\n' >&2
+  printf 'To clean up the failed installation and start fresh, please run:\n' >&2
+  printf '   bash scripts/uninstall-vm.sh\n' >&2
+  printf '=================================================================\n' >&2
+}
+trap cleanup_advice ERR
+
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"

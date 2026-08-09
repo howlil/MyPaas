@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cleanup_advice() {
+  echo "" >&2
+  echo "=================================================================" >&2
+  echo "❌ DEPLOYMENT FAILED!" >&2
+  echo "To clean up the failed deployment and start fresh, please run:" >&2
+  echo "   bash scripts/uninstall-vm.sh" >&2
+  echo "=================================================================" >&2
+}
+trap cleanup_advice ERR
+
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-.env}"
