@@ -97,6 +97,7 @@ type Project struct {
 	ComposeProfiles      []string         `json:"compose_profiles"`
 	ComposeWorkdir       *string          `json:"compose_workdir"`
 	ServiceResources     json.RawMessage  `json:"service_resources"`
+	StaticFrontendPath   *string          `json:"static_frontend_path"`
 }
 
 type User struct {

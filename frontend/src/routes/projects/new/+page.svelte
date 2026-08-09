@@ -85,8 +85,10 @@
 		composeFilePath: '',
 		composeOverridePaths: '',
 		composeProfiles: '',
-		composeWorkdir: ''
+		composeWorkdir: '',
+		staticFrontendPath: ''
 	};
+	let staticFrontendCandidates: string[] = [];
 
 	const deployModes: Array<{ id: DeployModeChoice; title: string; body: string }> = [
 		{ id: 'auto', title: 'Auto', body: 'Detect' },
@@ -242,9 +244,13 @@
 		repoTreeTruncated = detected.treeTruncated ?? repoTreeTruncated;
 		composePlan = normalizeComposePlan(detected.composePlan);
 		composeCandidates = Array.isArray(detected.composeCandidates) ? detected.composeCandidates : [];
+		staticFrontendCandidates = Array.isArray(detected.staticFrontendCandidates) ? detected.staticFrontendCandidates : [];
 		chooseDeployMode(detected.deployMode);
 		if (detected.mainService) {
 			form.mainService = detected.mainService;
+		}
+		if (staticFrontendCandidates.length > 0 && !form.staticFrontendPath) {
+			form.staticFrontendPath = staticFrontendCandidates[0];
 		}
 		if (detected.composeFile && !form.composeFilePath) {
 			form.composeFilePath = detected.composeFile;
@@ -385,8 +391,10 @@
 		detectMessage = '';
 		composePlan = null;
 		composeCandidates = [];
+		staticFrontendCandidates = [];
 		form.composeFilePath = '';
 		form.composeWorkdir = '';
+		form.staticFrontendPath = '';
 		detectedServices = [];
 		void inspectRepository(false, true).catch(() => undefined);
 	}
@@ -850,7 +858,8 @@
 				composeFilePath,
 				composeOverridePaths,
 				composeProfiles,
-				composeWorkdir
+				composeWorkdir,
+				staticFrontendPath: form.staticFrontendPath || null
 			});
 			toast.success('Project created');
 			await goto(`/projects/${project.id}`);
@@ -1118,6 +1127,33 @@
 						</div>
 					{/if}
 				</div>
+				
+				{#if (form.deployMode === 'compose' || form.deployMode === 'dockerfile') && staticFrontendCandidates.length > 0}
+					<div class="mt-4 rounded-md border border-brand-200 bg-brand-50 p-4 dark:border-brand-900/60 dark:bg-brand-950/20">
+						<div class="mb-3 flex items-start gap-3">
+							<div class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-500 text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+							</div>
+							<div>
+								<p class="text-sm font-medium text-brand-900 dark:text-brand-100">Hybrid Deployment Detected</p>
+								<p class="mt-1 text-xs leading-relaxed text-brand-800 dark:text-brand-200">
+									MyPaas found a static frontend (e.g. Vite) inside this repository. You can enable Zero-Container Static Deployment to build and serve it using Caddy (0 RAM), alongside your backend API container.
+								</p>
+							</div>
+						</div>
+						
+						<div>
+							<label class="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-200" for="staticFrontendPath">Deploy Static Frontend</label>
+							<select id="staticFrontendPath" bind:value={form.staticFrontendPath} class="field w-full sm:w-1/2">
+								<option value="">Disabled (Backend only)</option>
+								{#each staticFrontendCandidates as candidate}
+									<option value={candidate}>Enabled (Path: {candidate})</option>
+								{/each}
+							</select>
+							<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">If enabled, MyPaas will route <span class="font-mono">/api/*</span> to your backend container, and serve the frontend for all other paths.</p>
+						</div>
+					</div>
+				{/if}
 
 				{#if form.deployMode === 'compose'}
 					<div class="rounded-md border border-gray-200 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-950/40">

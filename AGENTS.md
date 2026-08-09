@@ -418,6 +418,11 @@ make sqlc             # Generate sqlc code
 - Compose non-main services: 256MB RAM, 0.25 CPU
 - Per-user quota: 6GB RAM, 3 CPU (via .env)
 
+**Static Frontend / Vite Deployments:**
+- **Zero-Container Strategy:** Jika user memiliki frontend statis (contoh: Vite, React, Svelte SPA) dan meminta bantuan setup deployment, **jangan** buatkan container Node.js / Nginx untuk frontend tersebut.
+- Arahkan user untuk menggunakan fitur **Static Deployment** MyPaas: build akan dilakukan sekali, dan folder `dist` akan di-serve langsung oleh Caddy (Zero RAM).
+- Untuk multi-service compose yang punya Vite frontend, buatkan container hanya untuk API/DB. Beritahu user bahwa frontend statisnya akan di-handle Caddy secara otomatis dan fitur statis ini bisa di *toggle* ON/OFF di MyPaas.
+
 ---
 
 ## Reference documents

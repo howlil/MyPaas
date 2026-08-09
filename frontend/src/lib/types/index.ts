@@ -42,6 +42,7 @@ export interface Project {
 	composeProfiles:      string[];
 	composeWorkdir:       string | null;
 	serviceResources:    Record<string, { memoryLimitMb: number; cpuLimit: number }>;
+	staticFrontendPath:   string | null;
 	createdAt:            string;
 	updatedAt:            string;
 }
@@ -272,6 +273,7 @@ export interface DeployModeDetection extends RepoInspection {
 	appPort: number;
 	composePlan: ComposePlan | null;
 	composeCandidates: ComposeCandidate[];
+	staticFrontendCandidates?: string[];
 }
 
 export interface AuditLog {

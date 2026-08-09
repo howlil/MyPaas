@@ -70,6 +70,45 @@ func (c *Client) AddFileServerRoute(ctx context.Context, host, root string) erro
 	return c.replaceHostRoute(ctx, host, route)
 }
 
+func (c *Client) AddHybridRoute(ctx context.Context, host, root string, port int32) error {
+	route, err := json.Marshal(map[string]any{
+		"match": []map[string]any{{"host": []string{host}}},
+		"handle": []map[string]any{
+			{
+				"handler": "subroute",
+				"routes": []map[string]any{
+					{
+						"match": []map[string]any{{"path": []string{"/api/*"}}},
+						"handle": []map[string]any{{
+							"handler": "reverse_proxy",
+							"upstreams": []map[string]any{{
+								"dial": fmt.Sprintf("%s:%d", c.upstreamHost, port),
+							}},
+						}},
+					},
+					{
+						"handle": []map[string]any{
+							{
+								"handler": "vars",
+								"root":    root,
+							},
+							{
+								"handler": "file_server",
+								"index_names": []string{"index.html"},
+							},
+						},
+					},
+				},
+			},
+		},
+		"terminal": true,
+	})
+	if err != nil {
+		return err
+	}
+	return c.replaceHostRoute(ctx, host, route)
+}
+
 func (c *Client) replaceHostRoute(ctx context.Context, host string, route json.RawMessage) error {
 	routes, err := c.routes(ctx)
 	if err != nil {

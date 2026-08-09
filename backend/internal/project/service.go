@@ -64,6 +64,7 @@ type CreateInput struct {
 	ComposeProfiles      []string
 	ComposeWorkdir       *string
 	ServiceResources     json.RawMessage
+	StaticFrontendPath   *string
 }
 
 type UpdateInput struct {
@@ -80,6 +81,7 @@ type UpdateInput struct {
 	ComposeProfiles      []string
 	ComposeWorkdir       *string
 	ServiceResources     json.RawMessage
+	StaticFrontendPath   *string
 }
 
 type DetectInput struct {
@@ -104,20 +106,21 @@ type DetectComposeResult struct {
 }
 
 type DetectResult struct {
-	DeployMode           string
-	Branch               string
-	DefaultBranch        string
-	Branches             []string
-	MainService          *string
-	Services             []string
-	ComposeFile          *string
-	HasDockerfile        bool
-	EnvVars              []envdiscover.Var
-	AppPort              int32
-	ComposePlan          *ComposePlan
-	Tree                 []RepoTreeEntry
-	TreeTruncated        bool
-	ComposeCandidates    []compose.Candidate
+	DeployMode               string
+	Branch                   string
+	DefaultBranch            string
+	Branches                 []string
+	MainService              *string
+	Services                 []string
+	ComposeFile              *string
+	HasDockerfile            bool
+	EnvVars                  []envdiscover.Var
+	AppPort                  int32
+	ComposePlan              *ComposePlan
+	Tree                     []RepoTreeEntry
+	TreeTruncated            bool
+	ComposeCandidates        []compose.Candidate
+	StaticFrontendCandidates []string
 }
 
 type RepoTreeEntry struct {
@@ -262,6 +265,8 @@ func detectModeOnBranch(ctx context.Context, repoURL, branch string) (DetectResu
 	if err != nil {
 		return DetectResult{}, fmt.Errorf("discover env vars: %w", err)
 	}
+	staticFrontendCandidates := findStaticFrontendCandidates(workspace)
+
 	if composeFile != "" {
 		if err := prepareComposePreviewEnv(workspace, composeFile, envVars); err != nil {
 			return DetectResult{}, err
@@ -276,29 +281,28 @@ func detectModeOnBranch(ctx context.Context, repoURL, branch string) (DetectResu
 		if err != nil {
 			return DetectResult{}, err
 		}
-		// Attribute env vars to compose services using the docker compose
-		// config JSON so the UI can show which service needs which var.
 		if rawConfig, err := composeConfigJSON(ctx, workspace, composeFile); err == nil {
 			envVars = envdiscover.AttributeServicesFromConfig(envVars, rawConfig)
 		}
 		composeFilePtr := composeFile
 		return DetectResult{
-			DeployMode:        "compose",
-			Branch:            branch,
-			MainService:       &mainService,
-			Services:          services,
-			ComposeFile:       &composeFilePtr,
-			HasDockerfile:     hasDockerfile,
-			EnvVars:           envVars,
-			AppPort:           appPort,
-			ComposePlan:       composePlan,
-			Tree:              tree,
-			TreeTruncated:     treeTruncated,
-			ComposeCandidates: composeCandidates,
+			DeployMode:               "compose",
+			Branch:                   branch,
+			MainService:              &mainService,
+			Services:                 services,
+			ComposeFile:              &composeFilePtr,
+			HasDockerfile:            hasDockerfile,
+			EnvVars:                  envVars,
+			AppPort:                  appPort,
+			ComposePlan:              composePlan,
+			Tree:                     tree,
+			TreeTruncated:            treeTruncated,
+			ComposeCandidates:        composeCandidates,
+			StaticFrontendCandidates: staticFrontendCandidates,
 		}, nil
 	}
 	if hasDockerfile {
-		return DetectResult{DeployMode: "dockerfile", Branch: branch, HasDockerfile: true, EnvVars: envVars, AppPort: inferDockerfileAppPort(workspace, envVars), Tree: tree, TreeTruncated: treeTruncated}, nil
+		return DetectResult{DeployMode: "dockerfile", Branch: branch, HasDockerfile: true, EnvVars: envVars, AppPort: inferDockerfileAppPort(workspace, envVars), Tree: tree, TreeTruncated: treeTruncated, StaticFrontendCandidates: staticFrontendCandidates}, nil
 	}
 	if _, _, err := staticdeploy.FindSiteRoot(workspace); err == nil {
 		return DetectResult{DeployMode: "static", Branch: branch, HasDockerfile: false, EnvVars: envVars, AppPort: 80, Tree: tree, TreeTruncated: treeTruncated}, nil
@@ -317,6 +321,35 @@ func detectModeOnBranch(ctx context.Context, repoURL, branch string) (DetectResu
 		providers = fmt.Sprintf(" (Detected: %s)", strings.Join(plan.Providers, ", "))
 	}
 	return DetectResult{}, fmt.Errorf("%w: SSR/Backend Runtime Detected%s. Please add a Dockerfile.\n\nAI Prompt:\n%s", errs.ErrNoDeployConfig, providers, prompt)
+}
+
+func findStaticFrontendCandidates(workspace string) []string {
+	var candidates []string
+	_ = filepath.WalkDir(workspace, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if name == ".git" || name == "node_modules" || name == "vendor" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		
+		name := d.Name()
+		if name == "package.json" {
+			dir := filepath.Dir(path)
+			if isStaticSPA(dir) {
+				rel, _ := filepath.Rel(workspace, dir)
+				if rel != "." {
+					candidates = append(candidates, filepath.ToSlash(rel))
+				}
+			}
+		}
+		return nil
+	})
+	return candidates
 }
 
 func isStaticSPA(workspace string) bool {
@@ -426,6 +459,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, er
 		ComposeProfiles:      normalizeStringSlice(input.ComposeProfiles),
 		ComposeWorkdir:       input.ComposeWorkdir,
 		ServiceResources:     input.ServiceResources,
+		StaticFrontendPath:   input.StaticFrontendPath,
 	})
 	if err != nil {
 		if isProjectUniqueViolation(err) {
@@ -552,6 +586,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 		ComposeProfiles:      composeProfiles,
 		ComposeWorkdir:       composeWorkdir,
 		ServiceResources:     serviceResources,
+		StaticFrontendPath:   input.StaticFrontendPath,
 	}); err != nil {
 		if isProjectUniqueViolation(err) {
 			return db.Project{}, errs.ErrProjectNameTaken

@@ -29,6 +29,7 @@
 	let composeOverridePaths = '';
 	let composeProfiles      = '';
 	let composeWorkdir       = '';
+	let staticFrontendPath   = '';
 	let serviceResourcesStr  = '{}';
 	let deleteInput = '';
 	let showWebhookSecret = false;
@@ -58,6 +59,7 @@
 	                 (project.deployMode === 'compose' && composeWorkdir !== (project.composeWorkdir || '')) ||
 	                 (project.deployMode === 'compose' && composeOverridePaths !== (project.composeOverridePaths || []).join(', ')) ||
 	                 (project.deployMode === 'compose' && composeProfiles !== (project.composeProfiles || []).join(', ')) ||
+	                 staticFrontendPath !== (project.staticFrontendPath || '') ||
 	                 serviceResourcesStr !== JSON.stringify(project.serviceResources || {}) ||
 	                 resourceProfile !== project.resourceProfile ||
 	                 memoryMb !== project.memoryLimitMb || cpuLimit !== project.cpuLimit);
@@ -93,6 +95,7 @@
 			composeOverridePaths = (project.composeOverridePaths ?? []).join(', ');
 			composeProfiles = (project.composeProfiles ?? []).join(', ');
 			composeWorkdir = project.composeWorkdir ?? '';
+			staticFrontendPath = project.staticFrontendPath ?? '';
 			serviceResourcesStr = JSON.stringify(project.serviceResources || {}, null, 2);
 			if (project.deployMode === 'compose') {
 				await loadComposeResources(project.id);
@@ -148,6 +151,7 @@
 				appPort: Number(appPort),
 				memoryLimitMb: Number(memoryMb),
 				cpuLimit: Number(cpuLimit),
+				staticFrontendPath: staticFrontendPath.trim() || null,
 				serviceResources: parsedResources
 			};
 			if (project.deployMode === 'compose') {
@@ -302,6 +306,13 @@
 						<div>
 							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="mainService">Main service</label>
 							<input id="mainService" type="text" bind:value={mainService} placeholder="app" class="field w-full font-mono" />
+						</div>
+					{/if}
+					{#if project.deployMode === 'compose' || project.deployMode === 'dockerfile'}
+						<div>
+							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="staticFrontendPath">Static Frontend Path</label>
+							<input id="staticFrontendPath" type="text" bind:value={staticFrontendPath} placeholder="e.g. frontend" class="field w-full font-mono" />
+							<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">If set, MyPaas builds and serves this directory statically alongside your backend.</p>
 						</div>
 					{/if}
 				</div>

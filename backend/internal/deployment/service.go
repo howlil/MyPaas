@@ -535,6 +535,9 @@ func (s *Service) reconcileRoute(ctx context.Context, project db.Project) error 
 		if project.AllocatedPort == nil {
 			return fmt.Errorf("running %s project has no allocated port", project.DeployMode)
 		}
+		if project.StaticFrontendPath != nil && *project.StaticFrontendPath != "" {
+			return s.caddy.AddHybridRoute(ctx, host, s.staticCaddyPath(project), *project.AllocatedPort)
+		}
 		return s.caddy.AddRoute(ctx, host, *project.AllocatedPort)
 	default:
 		return fmt.Errorf("unsupported deploy mode %q", project.DeployMode)
@@ -544,7 +547,11 @@ func (s *Service) reconcileRoute(ctx context.Context, project db.Project) error 
 func (s *Service) UpdateProjectRoute(ctx context.Context, before, after db.Project) error {
 	beforeHost := s.host(before)
 	afterHost := s.host(after)
-	if beforeHost == afterHost && samePort(before.AllocatedPort, after.AllocatedPort) {
+	
+	beforeHybrid := before.StaticFrontendPath != nil && *before.StaticFrontendPath != ""
+	afterHybrid := after.StaticFrontendPath != nil && *after.StaticFrontendPath != ""
+	
+	if beforeHost == afterHost && samePort(before.AllocatedPort, after.AllocatedPort) && beforeHybrid == afterHybrid {
 		return nil
 	}
 
@@ -565,6 +572,10 @@ func (s *Service) UpdateProjectRoute(ctx context.Context, before, after db.Proje
 			return nil
 		}
 		return s.caddy.AddFileServerRoute(ctx, afterHost, s.staticCaddyPath(after))
+	}
+	
+	if afterHybrid {
+		return s.caddy.AddHybridRoute(ctx, afterHost, s.staticCaddyPath(after), *after.AllocatedPort)
 	}
 	return s.caddy.AddRoute(ctx, afterHost, *after.AllocatedPort)
 }
@@ -654,6 +665,14 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 			return
 		}
 		return
+	}
+	
+	if project.StaticFrontendPath != nil && *project.StaticFrontendPath != "" {
+		staticWorkspace := filepath.Join(workspace, *project.StaticFrontendPath)
+		if err := s.runStaticFromWorkspace(ctx, project, deploymentID, staticWorkspace, log); err != nil {
+			s.fail(ctx, deploymentID, projectID, originalStatus, err)
+			return
+		}
 	}
 
 	envs, err := s.envs.DecryptedMap(ctx, project.ID)
@@ -901,7 +920,7 @@ func (s *Service) runComposeFromWorkspace(ctx context.Context, project db.Projec
 		return err
 	}
 	log("Updating route " + s.host(project))
-	if err := s.caddy.AddRoute(ctx, s.host(project), port); err != nil {
+	if err := s.setProjectRoute(ctx, project, s.host(project), port); err != nil {
 		return err
 	}
 
@@ -1094,7 +1113,7 @@ func (s *Service) switchComposeRelease(ctx context.Context, project db.Project, 
 	}
 
 	log("Updating route " + s.host(project))
-	if err := s.caddy.AddRoute(ctx, s.host(project), port); err != nil {
+	if err := s.setProjectRoute(ctx, project, s.host(project), port); err != nil {
 		return err
 	}
 	succeeded = true
@@ -1144,7 +1163,7 @@ func (s *Service) switchDockerfileContainer(ctx context.Context, project db.Proj
 	}()
 
 	log("Updating route " + host)
-	if err := s.caddy.AddRoute(ctx, host, newPort); err != nil {
+	if err := s.setProjectRoute(ctx, project, host, newPort); err != nil {
 		return err
 	}
 
@@ -1181,9 +1200,16 @@ func (s *Service) restoreRoute(ctx context.Context, project db.Project, host str
 		}
 		return
 	}
-	if err := s.caddy.AddRoute(ctx, host, *project.AllocatedPort); err != nil {
+	if err := s.setProjectRoute(ctx, project, host, *project.AllocatedPort); err != nil {
 		slog.Warn("restore route after failed switch", "projectId", project.ID, "port", *project.AllocatedPort, "error", err)
 	}
+}
+
+func (s *Service) setProjectRoute(ctx context.Context, project db.Project, host string, port int32) error {
+	if project.StaticFrontendPath != nil && *project.StaticFrontendPath != "" {
+		return s.caddy.AddHybridRoute(ctx, host, s.staticCaddyPath(project), port)
+	}
+	return s.caddy.AddRoute(ctx, host, port)
 }
 
 func (s *Service) ensurePort(ctx context.Context, project db.Project) (int32, error) {
