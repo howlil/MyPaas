@@ -189,8 +189,9 @@ else
 fi
 
 # ── 9. Start full stack ──────────────────────────────────────────────
-info "Building and starting MyPaas stack..."
-docker compose -f docker-compose.prod.yml up -d --build
+info "Pulling and starting MyPaas stack..."
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 
 # ── 10. Cleanup ──────────────────────────────────────────────────────
 rm -rf "$IMPORT_DIR"
