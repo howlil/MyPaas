@@ -3,16 +3,15 @@ FROM node:20-slim AS builder
 
 WORKDIR /build
 
-RUN corepack enable pnpm
-
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install
+COPY package.json ./
+# Menggunakan murni npm bawaan Node.js biar nggak ada drama pnpm/corepack crash
+RUN npm install
 
 COPY . .
 
-RUN pnpm build
+RUN npm run build
 # Remove devDependencies to save space before copying to runtime
-RUN pnpm prune --prod
+RUN npm prune --omit=dev
 
 ## Runtime stage
 FROM node:20-slim
