@@ -7,8 +7,8 @@ WORKDIR /build
 ENV NODE_OPTIONS="--max_old_space_size=1024"
 
 COPY package.json ./
-# Install murni, skip audit dan fund biar super enteng dan cepat
-RUN npm install --no-audit --no-fund
+# Install murni, skip audit dan fund biar super enteng dan cepat. Pakai legacy-peer-deps buat nge-bypass error versi vite
+RUN npm install --no-audit --no-fund --legacy-peer-deps
 
 COPY . .
 
