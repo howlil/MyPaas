@@ -103,10 +103,10 @@ type DetectComposeInput struct {
 // ranked candidate list plus branch metadata so the frontend picker can
 // render without re-fetching.
 type DetectComposeResult struct {
-	Branch        string                `json:"branch"`
-	DefaultBranch string                `json:"defaultBranch"`
-	Branches      []string              `json:"branches"`
-	Candidates    []compose.Candidate   `json:"candidates"`
+	Branch        string              `json:"branch"`
+	DefaultBranch string              `json:"defaultBranch"`
+	Branches      []string            `json:"branches"`
+	Candidates    []compose.Candidate `json:"candidates"`
 }
 
 type DetectResult struct {
@@ -317,13 +317,13 @@ func detectModeOnBranch(ctx context.Context, repoURL, branch, baseDir string) (D
 	if _, _, err := staticdeploy.FindSiteRoot(workspace); err == nil {
 		return DetectResult{DeployMode: "static", Branch: branch, HasDockerfile: false, EnvVars: envVars, AppPort: 80, Tree: tree, TreeTruncated: treeTruncated}, nil
 	}
-	
+
 	// Vibecoder Fallback: use nixpacks plan
 	plan, _ := nixpacks.PlanWorkspace(ctx, workspace)
 	if plan != nil && isStaticSPA(workspace) {
 		return DetectResult{DeployMode: "static", Branch: branch, HasDockerfile: false, EnvVars: envVars, AppPort: 80, Tree: tree, TreeTruncated: treeTruncated}, nil
 	}
-	
+
 	// If it's not a static SPA (or if nixpacks failed), reject it and provide the AI prompt
 	prompt := "I am deploying my project to a Docker-based platform. Please generate a production-ready, multi-stage Dockerfile for my project. The final stage must expose port 3000 and run the app. Make it as memory-efficient as possible using Alpine images."
 	providers := ""
@@ -346,7 +346,7 @@ func findStaticFrontendCandidates(workspace string) []string {
 			}
 			return nil
 		}
-		
+
 		name := d.Name()
 		if name == "package.json" {
 			dir := filepath.Dir(path)
@@ -368,17 +368,17 @@ func isStaticSPA(workspace string) bool {
 		return false
 	}
 	content := string(b)
-	
+
 	// If it has SSR/Backend frameworks, it's not an SPA
 	if strings.Contains(content, `"next"`) || strings.Contains(content, `"nuxt"`) || strings.Contains(content, `"@nestjs/core"`) {
 		return false
 	}
-	
+
 	// If it has SPA frameworks/bundlers
 	if strings.Contains(content, `"vite"`) || strings.Contains(content, `"react-scripts"`) || strings.Contains(content, `"@sveltejs/adapter-static"`) || strings.Contains(content, `"astro"`) || strings.Contains(content, `"vue-cli-service"`) {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -434,51 +434,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, er
 	input.ResourceProfile = profileID
 	input.MemoryLimitMb = memoryLimitMb
 	input.CPULimit = cpuLimit
-	if s.quota != nil {
-		if err := s.quota.CheckCreate(ctx, input.UserID, input.MemoryLimitMb, input.CPULimit); err != nil {
-			return db.Project{}, err
-		}
-	}
-
-	if _, err := s.queries.GetProjectByName(ctx, name); err == nil {
-		return db.Project{}, errs.ErrProjectNameTaken
-	} else if err != pgx.ErrNoRows {
-		return db.Project{}, err
-	}
-
 	secret, err := randomSecret()
 	if err != nil {
 		return db.Project{}, fmt.Errorf("generate webhook secret: %w", err)
 	}
 
-	project, err := s.queries.CreateProject(ctx, db.CreateProjectParams{
-		UserID:               input.UserID,
-		Name:                 name,
-		RepoUrl:              strings.TrimSpace(input.RepoURL),
-		Branch:               strings.TrimSpace(input.Branch),
-		Subdomain:            name,
-		DeployMode:           input.DeployMode,
-		ResourceProfile:      input.ResourceProfile,
-		MainService:          input.MainService,
-		AppPort:              input.AppPort,
-		WebhookSecret:        secret,
-		MemoryLimitMb:        input.MemoryLimitMb,
-		CpuLimit:             numericFromFloat(input.CPULimit),
-		ComposeFilePath:      input.ComposeFilePath,
-		ComposeOverridePaths: normalizeStringSlice(input.ComposeOverridePaths),
-		ComposeProfiles:      normalizeStringSlice(input.ComposeProfiles),
-		ComposeWorkdir:       input.ComposeWorkdir,
-		ServiceResources:     input.ServiceResources,
-		StaticFrontendPath:   input.StaticFrontendPath,
-		BaseDirectory:        input.BaseDirectory,
-	})
-	if err != nil {
-		if isProjectUniqueViolation(err) {
-			return db.Project{}, errs.ErrProjectNameTaken
-		}
-		return db.Project{}, err
-	}
-	return project, nil
+	return s.createProjectRecord(ctx, input, name, secret)
 }
 
 func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, error) {
@@ -576,13 +537,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 	input.ResourceProfile = profileID
 	input.MemoryLimitMb = memoryLimitMb
 	input.CPULimit = cpuLimit
-	if s.quota != nil {
-		if err := s.quota.CheckUpdate(ctx, existing, input.MemoryLimitMb, input.CPULimit); err != nil {
-			return db.Project{}, err
-		}
-	}
-
-	if err := s.queries.UpdateProject(ctx, db.UpdateProjectParams{
+	params := db.UpdateProjectParams{
 		ID:                   input.ID,
 		Name:                 name,
 		Subdomain:            name,
@@ -599,14 +554,9 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 		ServiceResources:     serviceResources,
 		StaticFrontendPath:   input.StaticFrontendPath,
 		BaseDirectory:        input.BaseDirectory,
-	}); err != nil {
-		if isProjectUniqueViolation(err) {
-			return db.Project{}, errs.ErrProjectNameTaken
-		}
-		return db.Project{}, err
 	}
 
-	return s.Get(ctx, input.ID)
+	return s.updateProjectRecord(ctx, existing, input, params)
 }
 
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {

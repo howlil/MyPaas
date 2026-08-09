@@ -227,8 +227,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		ComposeProfiles      []string        `json:"composeProfiles"`
 		ComposeWorkdir       *string         `json:"composeWorkdir"`
 		ServiceResources     json.RawMessage `json:"serviceResources"`
-		StaticFrontendPath   *string         `json:"staticFrontendPath"`
-		BaseDirectory        *string         `json:"baseDirectory"`
+		StaticFrontendPath   optionalString  `json:"staticFrontendPath"`
+		BaseDirectory        optionalString  `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
@@ -237,6 +237,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.MemoryLimitMb == 0 {
 		req.MemoryLimitMb = req.MemoryMb
 	}
+	staticFrontendPath := req.StaticFrontendPath.Resolve(before.StaticFrontendPath)
+	baseDirectory := req.BaseDirectory.Resolve(before.BaseDirectory)
 
 	project, err := h.service.Update(r.Context(), UpdateInput{
 		ID:                   id,
@@ -252,8 +254,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		ComposeProfiles:      req.ComposeProfiles,
 		ComposeWorkdir:       req.ComposeWorkdir,
 		ServiceResources:     req.ServiceResources,
-		StaticFrontendPath:   req.StaticFrontendPath,
-		BaseDirectory:        req.BaseDirectory,
+		StaticFrontendPath:   staticFrontendPath,
+		BaseDirectory:        baseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
