@@ -3,9 +3,12 @@ FROM node:20-slim AS builder
 
 WORKDIR /build
 
+# Batasi pemakaian RAM compiler JS maksimal 1GB biar VM nggak kena OOM Killer
+ENV NODE_OPTIONS="--max_old_space_size=1024"
+
 COPY package.json ./
-# Menggunakan murni npm bawaan Node.js biar nggak ada drama pnpm/corepack crash
-RUN npm install
+# Install murni, skip audit dan fund biar super enteng dan cepat
+RUN npm install --no-audit --no-fund
 
 COPY . .
 
