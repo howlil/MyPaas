@@ -87,14 +87,16 @@ type UpdateInput struct {
 }
 
 type DetectInput struct {
-	RepoURL     string
-	Branch      string
-	InspectOnly bool
+	RepoURL       string
+	Branch        string
+	InspectOnly   bool
+	BaseDirectory string
 }
 
 type DetectComposeInput struct {
-	RepoURL string
-	Branch  string
+	RepoURL       string
+	Branch        string
+	BaseDirectory string
 }
 
 // DetectComposeResult is the response for the detect-compose endpoint: the
@@ -184,7 +186,7 @@ func (s *Service) DetectMode(ctx context.Context, input DetectInput) (DetectResu
 		}, nil
 	}
 
-	result, err := detectModeOnBranch(ctx, repoURL, branch)
+	result, err := detectModeOnBranch(ctx, repoURL, branch, input.BaseDirectory)
 	if err != nil {
 		return DetectResult{}, err
 	}
@@ -226,6 +228,9 @@ func (s *Service) DetectCompose(ctx context.Context, input DetectComposeInput) (
 	if err := cloneForDetect(ctx, workspace, repoURL, branch); err != nil {
 		return DetectComposeResult{}, err
 	}
+	if input.BaseDirectory != "" {
+		workspace = filepath.Join(workspace, filepath.Clean("/"+input.BaseDirectory))
+	}
 	candidates, err := compose.Discover(workspace)
 	if err != nil {
 		return DetectComposeResult{}, err
@@ -238,7 +243,7 @@ func (s *Service) DetectCompose(ctx context.Context, input DetectComposeInput) (
 	}, nil
 }
 
-func detectModeOnBranch(ctx context.Context, repoURL, branch string) (DetectResult, error) {
+func detectModeOnBranch(ctx context.Context, repoURL, branch, baseDir string) (DetectResult, error) {
 	if branch == "" {
 		return DetectResult{}, fmt.Errorf("%w: branch is required", errs.ErrValidation)
 	}
@@ -251,6 +256,9 @@ func detectModeOnBranch(ctx context.Context, repoURL, branch string) (DetectResu
 
 	if err := cloneForDetect(ctx, workspace, repoURL, branch); err != nil {
 		return DetectResult{}, err
+	}
+	if baseDir != "" {
+		workspace = filepath.Join(workspace, filepath.Clean("/"+baseDir))
 	}
 	tree, treeTruncated, err := listRepositoryTree(workspace, maxRepoTreeEntries)
 	if err != nil {

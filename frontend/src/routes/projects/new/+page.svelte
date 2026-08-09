@@ -288,7 +288,7 @@
 		composeCandidatesLoading = true;
 		composeCandidatesError = '';
 		try {
-			const result = await api.projects.detectCompose({ repoUrl, branch });
+			const result = await api.projects.detectCompose({ repoUrl, branch, baseDirectory: form.baseDirectory.trim() || undefined });
 			composeCandidates = Array.isArray(result.candidates) ? result.candidates : [];
 			if (composeCandidates.length > 0 && !form.composeFilePath) {
 				form.composeFilePath = composeCandidates[0].path;
@@ -409,7 +409,7 @@
 		}
 
 		const requestedBranch = form.branch.trim();
-		const requestKey = `${repoUrl}\n${requestedBranch}`;
+		const requestKey = `${repoUrl}\n${requestedBranch}\n${form.baseDirectory.trim()}`;
 		if (!force && requestKey === lastRepoInspectKey) {
 			return undefined;
 		}
@@ -420,7 +420,8 @@
 		try {
 			const inspection = await api.projects.inspectRepository({
 				repoUrl,
-				branch: requestedBranch
+				branch: requestedBranch,
+				baseDirectory: form.baseDirectory.trim() || undefined
 			});
 			if (requestId !== repoInspectRequest) {
 				return undefined;
@@ -435,7 +436,7 @@
 			repoInspectMessage = branchOptions.length === 1
 				? '1 branch available'
 				: `${branchOptions.length} branches available`;
-			lastRepoInspectKey = `${repoUrl}\n${form.branch.trim()}`;
+			lastRepoInspectKey = `${repoUrl}\n${form.branch.trim()}\n${form.baseDirectory.trim()}`;
 			if (showToast) {
 				toast.success('Repository branches loaded');
 			}
@@ -790,7 +791,8 @@
 		try {
 			const detected = await api.projects.detectMode({
 				repoUrl: form.repoUrl,
-				branch: form.branch
+				branch: form.branch,
+				baseDirectory: form.baseDirectory.trim() || undefined
 			});
 			applyDetectedMode(detected);
 			if (showToast) {
@@ -1025,6 +1027,7 @@
 							bind:value={form.baseDirectory}
 							placeholder="/"
 							class="field w-full font-mono"
+							on:blur={() => void inspectRepository(false).catch(() => undefined)}
 						/>
 						<p class="mt-1 text-[11px] text-gray-500">Deploy from a specific subdirectory. E.g. <code>frontend</code> or <code>backend/api</code>.</p>
 					</div>
