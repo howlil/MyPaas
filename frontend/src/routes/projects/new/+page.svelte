@@ -860,7 +860,6 @@
 				composeOverridePaths,
 				composeProfiles,
 				composeWorkdir,
-				serviceResources: form.serviceResources,
 				staticFrontendPath: form.staticFrontendPath || null,
 				baseDirectory: form.baseDirectory.trim() || null
 			});
