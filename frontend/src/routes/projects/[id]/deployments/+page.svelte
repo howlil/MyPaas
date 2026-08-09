@@ -79,6 +79,14 @@
 		return new Date(value).toLocaleString();
 	}
 
+	function deploymentSource(deployment: Deployment): string {
+		return deployment.commitSha?.slice(0, 8) ?? deployment.imageTag ?? '-';
+	}
+
+	function deploymentSummary(deployment: Deployment): string {
+		return deployment.commitMessage || (deployment.imageTag ? 'Container image deployment' : 'No source metadata');
+	}
+
 	onMount(() => {
 		mounted = true;
 		void load();
@@ -149,7 +157,7 @@
 
 <TableShell
 	title="Deployment history"
-	description="Latest build attempts, commit metadata, and rollback actions."
+	description="Latest deployment attempts, source metadata, and rollback actions."
 	{loading}
 	loadingRows={3}
 	error={error && deployments.length === 0 ? error : ''}
@@ -193,15 +201,15 @@
 				<div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_9rem_8rem_auto] lg:items-center">
 					<div class="min-w-0">
 						<div class="flex flex-wrap items-center gap-2">
-							<span class="font-mono text-sm font-semibold text-gray-950 dark:text-white">
-								{d.commitSha?.slice(0, 8) ?? '-'}
+							<span class="max-w-full truncate font-mono text-sm font-semibold text-gray-950 dark:text-white" title={deploymentSource(d)}>
+								{deploymentSource(d)}
 							</span>
 							<StatusBadge status={d.status} />
 							<span class="rounded border border-gray-200 px-1.5 py-0.5 text-[11px] font-medium capitalize text-gray-500 dark:border-gray-800 dark:text-gray-400">
 								{d.triggeredBy}
 							</span>
 						</div>
-						<p class="mt-1 truncate text-sm text-gray-600 dark:text-gray-400">{d.commitMessage || 'No commit message'}</p>
+						<p class="mt-1 truncate text-sm text-gray-600 dark:text-gray-400">{deploymentSummary(d)}</p>
 						{#if d.errorMsg}
 							<p class="mt-1 text-xs text-red-600 dark:text-red-300">{d.errorMsg}</p>
 						{/if}
@@ -209,7 +217,7 @@
 					<p class="text-xs text-gray-500 dark:text-gray-400">{formatDate(d.startedAt)}</p>
 					<p class="font-mono text-xs text-gray-500 dark:text-gray-400">{formatDuration(d.startedAt, d.finishedAt)}</p>
 					<div class="flex shrink-0 gap-2 lg:justify-end">
-						<IconButton label={`${expanded.has(d.id) ? 'Hide' : 'Show'} build log for ${d.commitSha?.slice(0, 8) ?? 'deployment'}`} on:click={() => toggle(d.id)}>
+						<IconButton label={`${expanded.has(d.id) ? 'Hide' : 'Show'} deployment log for ${deploymentSource(d)}`} on:click={() => toggle(d.id)}>
 							{#if expanded.has(d.id)}
 								<ChevronUp class="h-4 w-4" aria-hidden="true" />
 							{:else}
@@ -230,7 +238,7 @@
 									Confirm rollback
 								</ActionButton>
 							{:else}
-								<IconButton label={`Rollback deployment ${d.commitSha?.slice(0, 8) ?? d.id}`} variant="danger" on:click={() => requestRollback(d.id)} disabled={rollingBackId !== ''}>
+								<IconButton label={`Rollback deployment ${deploymentSource(d)}`} variant="danger" on:click={() => requestRollback(d.id)} disabled={rollingBackId !== ''}>
 									<RotateCcw class="h-4 w-4" aria-hidden="true" />
 								</IconButton>
 							{/if}
@@ -240,7 +248,7 @@
 				{#if expanded.has(d.id)}
 					<div class="mt-4 overflow-hidden rounded-md border border-gray-800 bg-gray-950">
 						<div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 px-3 py-2">
-							<p class="font-mono text-[11px] font-semibold uppercase tracking-wider text-gray-300">Build output</p>
+							<p class="font-mono text-[11px] font-semibold uppercase tracking-wider text-gray-300">Deployment output</p>
 							<p class="text-[11px] text-gray-500">
 								{#if isPipelineActive(d.status)}
 									{d.buildLog ? 'Live, refreshes every 3 seconds' : 'Waiting for output'}
@@ -253,7 +261,7 @@
 							<pre class="max-h-80 overflow-auto p-3 text-xs leading-5 text-gray-100">{d.buildLog}</pre>
 						{:else}
 							<div class="px-3 py-6 text-center text-xs leading-5 text-gray-400" role={isPipelineActive(d.status) ? 'status' : undefined}>
-								{isPipelineActive(d.status) ? `Pipeline is ${d.status}. Build output will appear here automatically.` : 'This deployment did not produce build output.'}
+								{isPipelineActive(d.status) ? `Pipeline is ${d.status}. Deployment output will appear here automatically.` : 'This deployment did not produce build output.'}
 							</div>
 						{/if}
 					</div>

@@ -20,6 +20,7 @@
 
 	let name        = '';
 	let branch      = '';
+	let imageRef    = '';
 	let appPort     = 3000;
 	let mainService = '';
 	let resourceProfile: ResourceProfile = 'custom';
@@ -53,7 +54,9 @@
 		{ id: 'custom',       title: 'Custom',            memoryMb: 512, cpuLimit: 0.5 }
 	];
 
-	$: nameChanged = project && (name !== project.name || branch !== project.branch ||
+	$: nameChanged = project && (name !== project.name ||
+	                 (project.sourceType === 'git' && branch !== project.branch) ||
+	                 (project.sourceType === 'registry' && imageRef !== (project.imageRef || '')) ||
 	                 (project.deployMode !== 'static' && appPort !== project.appPort) ||
 	                 (project.deployMode === 'compose' && (mainService || '') !== (project.mainService || '')) ||
 	                 (project.deployMode === 'compose' && composeFilePath !== (project.composeFilePath || '')) ||
@@ -88,6 +91,7 @@
 			project = await api.projects.get($page.params.id ?? '');
 			name = project.name;
 			branch = project.branch;
+			imageRef = project.imageRef ?? '';
 			appPort = project.appPort;
 			mainService = project.mainService ?? '';
 			resourceProfile = project.resourceProfile;
@@ -149,13 +153,13 @@
 			}
 			const payload: Record<string, unknown> = {
 				name,
-				branch,
+				...(project.sourceType === 'git' ? { branch } : { imageRef: imageRef.trim() }),
 				resourceProfile,
 				appPort: Number(appPort),
 				memoryLimitMb: Number(memoryMb),
 				cpuLimit: Number(cpuLimit),
-				staticFrontendPath: staticFrontendPath.trim() || null,
-				baseDirectory: baseDirectory.trim() || null,
+				staticFrontendPath: project.sourceType === 'git' ? staticFrontendPath.trim() || null : null,
+				baseDirectory: project.sourceType === 'git' ? baseDirectory.trim() || null : null,
 				serviceResources: parsedResources
 			};
 			if (project.deployMode === 'compose') {
@@ -284,7 +288,7 @@
 		<div class="space-y-4">
 			<SectionPanel
 				title="General"
-				description="Routing and deployment branch settings."
+				description="Source, routing, and runtime settings."
 			>
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div class="sm:col-span-2">
@@ -296,15 +300,23 @@
 							</p>
 						{/if}
 					</div>
-					<div>
-						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="pbranch">Deploy branch</label>
-						<input id="pbranch" type="text" bind:value={branch} class="field w-full font-mono" />
-					</div>
-					<div>
-						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="baseDirectory">Base directory</label>
-						<input id="baseDirectory" type="text" bind:value={baseDirectory} placeholder="/" class="field w-full font-mono" />
-						<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Deploy from a specific subdirectory instead of the repo root.</p>
-					</div>
+					{#if project.sourceType === 'registry'}
+						<div class="sm:col-span-2">
+							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="imageRef">Container image</label>
+							<input id="imageRef" type="text" bind:value={imageRef} placeholder="ghcr.io/example/app:latest" class="field w-full font-mono" />
+							<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Deploy pulls this public OCI image. Changing the reference takes effect on the next deploy.</p>
+						</div>
+					{:else}
+						<div>
+							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="pbranch">Deploy branch</label>
+							<input id="pbranch" type="text" bind:value={branch} class="field w-full font-mono" />
+						</div>
+						<div>
+							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="baseDirectory">Base directory</label>
+							<input id="baseDirectory" type="text" bind:value={baseDirectory} placeholder="/" class="field w-full font-mono" />
+							<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Deploy from a specific subdirectory instead of the repo root.</p>
+						</div>
+					{/if}
 					{#if project.deployMode !== 'static'}
 						<div>
 							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="appPort">App port</label>
@@ -317,7 +329,7 @@
 							<input id="mainService" type="text" bind:value={mainService} placeholder="app" class="field w-full font-mono" />
 						</div>
 					{/if}
-					{#if project.deployMode === 'compose' || project.deployMode === 'dockerfile'}
+					{#if project.sourceType === 'git' && (project.deployMode === 'compose' || project.deployMode === 'dockerfile')}
 						<div>
 							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="staticFrontendPath">Static Frontend Path</label>
 							<input id="staticFrontendPath" type="text" bind:value={staticFrontendPath} placeholder="e.g. frontend" class="field w-full font-mono" />
@@ -450,6 +462,7 @@
 		</div>
 
 		<div class="space-y-4">
+			{#if project.sourceType === 'git'}
 			<SectionPanel
 				title="Webhook"
 				description="Use this for GitHub push deploys."
@@ -527,6 +540,7 @@
 					{/if}
 				</div>
 			</SectionPanel>
+			{/if}
 
 			{#if project.deployMode === 'compose'}
 				<SectionPanel
@@ -617,7 +631,7 @@
 	</div>
 {/if}
 
-{#if showWebhookHelp && project}
+{#if showWebhookHelp && project && project.sourceType === 'git'}
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center p-4"
 	>

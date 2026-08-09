@@ -81,6 +81,40 @@ func (d *DockerCLI) Build(ctx context.Context, dir, image string, log func(strin
 	return runLogged(ctx, dir, log, "docker", "build", "--label", ManagedImageLabel, "-t", image, ".")
 }
 
+func (d *DockerCLI) Pull(ctx context.Context, image string, log func(string)) error {
+	image = strings.TrimSpace(image)
+	if image == "" {
+		return fmt.Errorf("container image is required")
+	}
+	return runLogged(ctx, "", log, "docker", "pull", image)
+}
+
+func (d *DockerCLI) RepoDigest(ctx context.Context, image string) (string, error) {
+	out, err := commandContext(ctx, "docker", "image", "inspect", image).CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("docker image inspect: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return repoDigestFromInspect(out)
+}
+
+func repoDigestFromInspect(raw []byte) (string, error) {
+	var rows []struct {
+		RepoDigests []string `json:"RepoDigests"`
+	}
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return "", fmt.Errorf("decode docker image inspect: %w", err)
+	}
+	if len(rows) == 0 {
+		return "", nil
+	}
+	for _, digest := range rows[0].RepoDigests {
+		if strings.TrimSpace(digest) != "" {
+			return strings.TrimSpace(digest), nil
+		}
+	}
+	return "", nil
+}
+
 func (d *DockerCLI) Run(ctx context.Context, opts RunOptions, log func(string)) error {
 	args := []string{
 		"run", "-d",

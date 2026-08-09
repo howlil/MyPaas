@@ -1,7 +1,8 @@
 // ─── Domain enums ────────────────────────────────────────────────────────────
 
 export type ProjectStatus = 'pending' | 'running' | 'stopped' | 'crashed' | 'building';
-export type DeployMode    = 'dockerfile' | 'compose' | 'static';
+export type DeployMode    = 'dockerfile' | 'compose' | 'static' | 'image';
+export type ProjectSourceType = 'git' | 'registry';
 export type DeployStatus  = 'queued' | 'cloning' | 'building' | 'starting' | 'running' | 'failed' | 'stopped' | 'rolled_back';
 export type UserRole      = 'owner' | 'collaborator';
 export type TriggeredBy   = 'manual' | 'webhook' | 'rollback';
@@ -24,7 +25,9 @@ export interface Project {
 	id:                   string;
 	userId:               string;
 	name:                 string;
+	sourceType:           ProjectSourceType;
 	repoUrl:              string;
+	imageRef:             string | null;
 	branch:               string;
 	subdomain:            string;
 	deployMode:          DeployMode;

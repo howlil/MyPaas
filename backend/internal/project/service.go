@@ -51,7 +51,9 @@ type Service struct {
 type CreateInput struct {
 	UserID               uuid.UUID
 	Name                 string
+	SourceType           string
 	RepoURL              string
+	ImageRef             *string
 	Branch               string
 	DeployMode           string
 	ResourceProfile      string
@@ -72,6 +74,7 @@ type UpdateInput struct {
 	ID                   uuid.UUID
 	Name                 string
 	Branch               string
+	ImageRef             *string
 	ResourceProfile      string
 	MainService          *string
 	AppPort              int32
@@ -103,10 +106,10 @@ type DetectComposeInput struct {
 // ranked candidate list plus branch metadata so the frontend picker can
 // render without re-fetching.
 type DetectComposeResult struct {
-	Branch        string                `json:"branch"`
-	DefaultBranch string                `json:"defaultBranch"`
-	Branches      []string              `json:"branches"`
-	Candidates    []compose.Candidate   `json:"candidates"`
+	Branch        string              `json:"branch"`
+	DefaultBranch string              `json:"defaultBranch"`
+	Branches      []string            `json:"branches"`
+	Candidates    []compose.Candidate `json:"candidates"`
 }
 
 type DetectResult struct {
@@ -317,13 +320,13 @@ func detectModeOnBranch(ctx context.Context, repoURL, branch, baseDir string) (D
 	if _, _, err := staticdeploy.FindSiteRoot(workspace); err == nil {
 		return DetectResult{DeployMode: "static", Branch: branch, HasDockerfile: false, EnvVars: envVars, AppPort: 80, Tree: tree, TreeTruncated: treeTruncated}, nil
 	}
-	
+
 	// Vibecoder Fallback: use nixpacks plan
 	plan, _ := nixpacks.PlanWorkspace(ctx, workspace)
 	if plan != nil && isStaticSPA(workspace) {
 		return DetectResult{DeployMode: "static", Branch: branch, HasDockerfile: false, EnvVars: envVars, AppPort: 80, Tree: tree, TreeTruncated: treeTruncated}, nil
 	}
-	
+
 	// If it's not a static SPA (or if nixpacks failed), reject it and provide the AI prompt
 	prompt := "I am deploying my project to a Docker-based platform. Please generate a production-ready, multi-stage Dockerfile for my project. The final stage must expose port 3000 and run the app. Make it as memory-efficient as possible using Alpine images."
 	providers := ""
@@ -346,7 +349,7 @@ func findStaticFrontendCandidates(workspace string) []string {
 			}
 			return nil
 		}
-		
+
 		name := d.Name()
 		if name == "package.json" {
 			dir := filepath.Dir(path)
@@ -368,17 +371,17 @@ func isStaticSPA(workspace string) bool {
 		return false
 	}
 	content := string(b)
-	
+
 	// If it has SSR/Backend frameworks, it's not an SPA
 	if strings.Contains(content, `"next"`) || strings.Contains(content, `"nuxt"`) || strings.Contains(content, `"@nestjs/core"`) {
 		return false
 	}
-	
+
 	// If it has SPA frameworks/bundlers
 	if strings.Contains(content, `"vite"`) || strings.Contains(content, `"react-scripts"`) || strings.Contains(content, `"@sveltejs/adapter-static"`) || strings.Contains(content, `"astro"`) || strings.Contains(content, `"vue-cli-service"`) {
 		return true
 	}
-	
+
 	return false
 }
 
@@ -387,23 +390,55 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, er
 	if err := validateName(name); err != nil {
 		return db.Project{}, err
 	}
-	if strings.TrimSpace(input.RepoURL) == "" {
-		return db.Project{}, fmt.Errorf("%w: repository URL is required", errs.ErrValidation)
+
+	sourceType, err := normalizeSourceType(input.SourceType, input.DeployMode)
+	if err != nil {
+		return db.Project{}, err
 	}
-	input.Branch = strings.TrimSpace(input.Branch)
-	if input.Branch == "" {
-		branch, err := resolveDefaultBranch(ctx, input.RepoURL)
+	if sourceType == SourceTypeRegistry {
+		imageRef, err := normalizeImageRef(input.ImageRef)
 		if err != nil {
 			return db.Project{}, err
 		}
-		input.Branch = branch
+		input.ImageRef = imageRef
+		input.RepoURL = ""
+		input.Branch = "main"
+		input.DeployMode = "image"
+		input.MainService = nil
+		input.ComposeFilePath = nil
+		input.ComposeOverridePaths = nil
+		input.ComposeProfiles = nil
+		input.ComposeWorkdir = nil
+		input.StaticFrontendPath = nil
+		input.BaseDirectory = nil
+	} else {
+		input.ImageRef = nil
+		if strings.TrimSpace(input.RepoURL) == "" {
+			return db.Project{}, fmt.Errorf("%w: repository URL is required", errs.ErrValidation)
+		}
+		input.Branch = strings.TrimSpace(input.Branch)
+		if input.Branch == "" {
+			branch, err := resolveDefaultBranch(ctx, input.RepoURL)
+			if err != nil {
+				return db.Project{}, err
+			}
+			input.Branch = branch
+		}
+		if input.DeployMode == "" || input.DeployMode == "auto" {
+			input.DeployMode = "dockerfile"
+		}
 	}
-	if input.DeployMode == "" || input.DeployMode == "auto" {
-		input.DeployMode = "dockerfile"
+
+	if input.DeployMode != "dockerfile" && input.DeployMode != "compose" && input.DeployMode != "static" && input.DeployMode != "image" {
+		return db.Project{}, fmt.Errorf("%w: deploy mode must be dockerfile, compose, static, or image", errs.ErrValidation)
 	}
-	if input.DeployMode != "dockerfile" && input.DeployMode != "compose" && input.DeployMode != "static" {
-		return db.Project{}, fmt.Errorf("%w: deploy mode must be dockerfile, compose, or static", errs.ErrValidation)
+	if sourceType == SourceTypeGit && input.DeployMode == "image" {
+		return db.Project{}, fmt.Errorf("%w: image deploy mode requires registry source", errs.ErrValidation)
 	}
+	if sourceType == SourceTypeRegistry && input.DeployMode != "image" {
+		return db.Project{}, fmt.Errorf("%w: registry source requires image deploy mode", errs.ErrValidation)
+	}
+
 	if input.DeployMode == "compose" {
 		mainService := strings.TrimSpace(valueOrEmpty(input.MainService))
 		if mainService == "" {
@@ -471,6 +506,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, er
 		ServiceResources:     input.ServiceResources,
 		StaticFrontendPath:   input.StaticFrontendPath,
 		BaseDirectory:        input.BaseDirectory,
+		ImageRef:             input.ImageRef,
 	})
 	if err != nil {
 		if isProjectUniqueViolation(err) {
@@ -518,6 +554,19 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 	}
 	if strings.TrimSpace(input.ResourceProfile) == "" {
 		input.ResourceProfile = existing.ResourceProfile
+	}
+
+	imageRef := existing.ImageRef
+	if existing.DeployMode == "image" {
+		if input.ImageRef != nil {
+			normalized, err := normalizeImageRef(input.ImageRef)
+			if err != nil {
+				return db.Project{}, err
+			}
+			imageRef = normalized
+		}
+	} else if input.ImageRef != nil {
+		return db.Project{}, fmt.Errorf("%w: imageRef is only valid for registry projects", errs.ErrValidation)
 	}
 
 	// MainService: only meaningful for compose projects. Allow mutation when
@@ -599,6 +648,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 		ServiceResources:     serviceResources,
 		StaticFrontendPath:   input.StaticFrontendPath,
 		BaseDirectory:        input.BaseDirectory,
+		ImageRef:             imageRef,
 	}); err != nil {
 		if isProjectUniqueViolation(err) {
 			return db.Project{}, errs.ErrProjectNameTaken

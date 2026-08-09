@@ -57,8 +57,8 @@
 
 			<div class="mt-5 grid gap-3 sm:grid-cols-3">
 				<div>
-					<p class="metric-label">Branch</p>
-					<p class="mt-1 truncate font-mono text-sm font-semibold text-gray-950 dark:text-white">{project.branch}</p>
+					<p class="metric-label">{project.sourceType === 'registry' ? 'Source' : 'Branch'}</p>
+					<p class="mt-1 truncate font-mono text-sm font-semibold text-gray-950 dark:text-white">{project.sourceType === 'registry' ? 'registry' : project.branch}</p>
 				</div>
 				<div>
 					<p class="metric-label">Runtime</p>
@@ -76,7 +76,7 @@
 		<div class="border-t border-gray-100 bg-gray-50/70 p-5 dark:border-gray-800 dark:bg-gray-900/50 lg:border-l lg:border-t-0">
 			<p class="metric-label">Project actions</p>
 			<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-				{isBusy ? 'One operation is active. Other actions are guarded until it finishes.' : 'Deploy from the configured branch or recover the current container.'}
+				{isBusy ? 'One operation is active. Other actions are guarded until it finishes.' : project.sourceType === 'registry' ? 'Pull the configured image or recover the current container.' : 'Deploy from the configured branch or recover the current container.'}
 			</p>
 			<div class="mt-4 flex flex-wrap gap-2">
 				<ActionButton variant="primary" on:click={() => dispatch('deploy')} disabled={deployDisabled} loading={deployLoading} loadingLabel={deployLoadingLabel}>Deploy</ActionButton>
@@ -94,8 +94,8 @@
 
 	<div class="grid border-y border-gray-100 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-900/60 sm:grid-cols-2 lg:grid-cols-4">
 		<div class="border-b border-gray-100 px-5 py-3 dark:border-gray-800 sm:border-r lg:border-b-0">
-			<p class="metric-label">Repository</p>
-			<p class="mt-1 truncate font-mono text-xs text-gray-800 dark:text-gray-200">{project.repoUrl}</p>
+			<p class="metric-label">{project.sourceType === 'registry' ? 'Container image' : 'Repository'}</p>
+			<p class="mt-1 truncate font-mono text-xs text-gray-800 dark:text-gray-200">{project.sourceType === 'registry' ? (project.imageRef ?? '-') : project.repoUrl}</p>
 		</div>
 		<div class="border-b border-gray-100 px-5 py-3 dark:border-gray-800 lg:border-b-0 lg:border-r">
 			<p class="metric-label">App port</p>

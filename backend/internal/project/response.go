@@ -18,7 +18,9 @@ type Response struct {
 	ID                   string   `json:"id"`
 	UserID               string   `json:"userId"`
 	Name                 string   `json:"name"`
+	SourceType           string   `json:"sourceType"`
 	RepoURL              string   `json:"repoUrl"`
+	ImageRef             *string  `json:"imageRef"`
 	Branch               string   `json:"branch"`
 	Subdomain            string   `json:"subdomain"`
 	DeployMode           string   `json:"deployMode"`
@@ -71,7 +73,9 @@ func ResponseFromDB(project db.Project) Response {
 		ID:                 project.ID.String(),
 		UserID:             project.UserID.String(),
 		Name:               project.Name,
+		SourceType:         projectSourceType(project.DeployMode),
 		RepoURL:            project.RepoUrl,
+		ImageRef:           project.ImageRef,
 		Branch:             project.Branch,
 		Subdomain:          project.Subdomain,
 		DeployMode:         project.DeployMode,

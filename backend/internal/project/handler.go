@@ -73,7 +73,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Name                 string         `json:"name"`
+		SourceType           string         `json:"sourceType"`
 		RepoURL              string         `json:"repoUrl"`
+		ImageRef             *string        `json:"imageRef"`
 		Branch               string         `json:"branch"`
 		DeployMode           string         `json:"deployMode"`
 		ResourceProfile      string         `json:"resourceProfile"`
@@ -102,7 +104,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	project, err := h.service.Create(r.Context(), CreateInput{
 		UserID:               user.ID,
 		Name:                 req.Name,
+		SourceType:           req.SourceType,
 		RepoURL:              req.RepoURL,
+		ImageRef:             req.ImageRef,
 		Branch:               req.Branch,
 		DeployMode:           req.DeployMode,
 		ResourceProfile:      req.ResourceProfile,
@@ -216,6 +220,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name                 string          `json:"name"`
 		Branch               string          `json:"branch"`
+		ImageRef             *string         `json:"imageRef"`
 		ResourceProfile      string          `json:"resourceProfile"`
 		MainService          *string         `json:"mainService"`
 		AppPort              int32           `json:"appPort"`
@@ -242,6 +247,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		ID:                   id,
 		Name:                 req.Name,
 		Branch:               req.Branch,
+		ImageRef:             req.ImageRef,
 		ResourceProfile:      req.ResourceProfile,
 		MainService:          req.MainService,
 		AppPort:              req.AppPort,

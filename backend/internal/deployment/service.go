@@ -145,6 +145,9 @@ func (s *Service) TriggerWebhook(ctx context.Context, projectID uuid.UUID) (db.D
 	if err != nil {
 		return db.Deployment{}, err
 	}
+	if project.DeployMode == "image" {
+		return db.Deployment{}, fmt.Errorf("%w: registry projects do not support Git webhooks", errs.ErrValidation)
+	}
 	lock := s.projectLock(project.ID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -213,7 +216,7 @@ func (s *Service) Rollback(ctx context.Context, deploymentID, userID uuid.UUID) 
 	if project.DeployMode == "static" {
 		return db.Deployment{}, fmt.Errorf("%w: static deployments are rolled forward by redeploying the target commit", errs.ErrValidation)
 	}
-	if project.DeployMode == "dockerfile" && (target.ImageTag == nil || strings.TrimSpace(*target.ImageTag) == "") {
+	if (project.DeployMode == "dockerfile" || project.DeployMode == "image") && (target.ImageTag == nil || strings.TrimSpace(*target.ImageTag) == "") {
 		return db.Deployment{}, fmt.Errorf("%w: rollback target does not have an image tag", errs.ErrValidation)
 	}
 
@@ -531,7 +534,7 @@ func (s *Service) reconcileRoute(ctx context.Context, project db.Project) error 
 	switch project.DeployMode {
 	case "static":
 		return s.caddy.AddFileServerRoute(ctx, host, s.staticCaddyPath(project))
-	case "dockerfile", "compose":
+	case "dockerfile", "compose", "image":
 		if project.AllocatedPort == nil {
 			return fmt.Errorf("running %s project has no allocated port", project.DeployMode)
 		}
@@ -547,10 +550,10 @@ func (s *Service) reconcileRoute(ctx context.Context, project db.Project) error 
 func (s *Service) UpdateProjectRoute(ctx context.Context, before, after db.Project) error {
 	beforeHost := s.host(before)
 	afterHost := s.host(after)
-	
+
 	beforeHybrid := before.StaticFrontendPath != nil && *before.StaticFrontendPath != ""
 	afterHybrid := after.StaticFrontendPath != nil && *after.StaticFrontendPath != ""
-	
+
 	if beforeHost == afterHost && samePort(before.AllocatedPort, after.AllocatedPort) && beforeHybrid == afterHybrid {
 		return nil
 	}
@@ -573,7 +576,7 @@ func (s *Service) UpdateProjectRoute(ctx context.Context, before, after db.Proje
 		}
 		return s.caddy.AddFileServerRoute(ctx, afterHost, s.staticCaddyPath(after))
 	}
-	
+
 	if afterHybrid {
 		return s.caddy.AddHybridRoute(ctx, afterHost, s.staticCaddyPath(after), *after.AllocatedPort)
 	}
@@ -614,6 +617,13 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 
 	if err := os.MkdirAll(workspace, 0750); err != nil {
 		s.fail(ctx, deploymentID, projectID, originalStatus, err)
+		return
+	}
+
+	if project.DeployMode == "image" {
+		if err := s.runImageDeployment(ctx, project, deploymentID, workspace, log); err != nil {
+			s.fail(ctx, deploymentID, projectID, originalStatus, err)
+		}
 		return
 	}
 
@@ -672,7 +682,7 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 		}
 		return
 	}
-	
+
 	if project.StaticFrontendPath != nil && *project.StaticFrontendPath != "" {
 		staticWorkspace := filepath.Join(workspace, *project.StaticFrontendPath)
 		if err := s.runStaticFromWorkspace(ctx, project, deploymentID, staticWorkspace, log); err != nil {
@@ -748,6 +758,61 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 		return
 	}
 	log("Deployment running at " + s.publicURL(project))
+}
+
+func (s *Service) runImageDeployment(ctx context.Context, project db.Project, deploymentID uuid.UUID, workspace string, log func(string)) error {
+	if project.ImageRef == nil || strings.TrimSpace(*project.ImageRef) == "" {
+		return fmt.Errorf("%w: registry project does not have an image reference", errs.ErrValidation)
+	}
+	sourceImage := strings.TrimSpace(*project.ImageRef)
+
+	if err := s.setStatus(ctx, deploymentID, "building"); err != nil {
+		return err
+	}
+	log("Pulling image " + sourceImage)
+	if err := s.docker.Pull(ctx, sourceImage, log); err != nil {
+		return err
+	}
+
+	imageTag := sourceImage
+	if digest, err := s.docker.RepoDigest(ctx, sourceImage); err != nil {
+		log("WARNING: image digest could not be resolved; deployment history will keep the supplied image reference")
+		slog.Warn("resolve registry image digest", "projectId", project.ID, "image", sourceImage, "error", err)
+	} else if digest != "" {
+		imageTag = digest
+		log("Resolved image digest " + digest)
+	}
+
+	if err := s.queries.SetDeploymentBuildInfo(ctx, db.SetDeploymentBuildInfoParams{
+		ID:       deploymentID,
+		ImageTag: &imageTag,
+	}); err != nil {
+		return err
+	}
+
+	envFile, err := s.writeProjectEnvFile(ctx, project.ID, workspace)
+	if err != nil {
+		return err
+	}
+	if err := s.setStatus(ctx, deploymentID, "starting"); err != nil {
+		return err
+	}
+	if err := s.switchDockerfileContainer(ctx, project, deploymentID, imageTag, envFile, log); err != nil {
+		return err
+	}
+
+	if err := s.queries.SetProjectActiveDeployment(ctx, db.SetProjectActiveDeploymentParams{
+		ID:                 project.ID,
+		ActiveDeploymentID: pgUUID(deploymentID),
+		Status:             "running",
+	}); err != nil {
+		return err
+	}
+	if err := s.queries.FinishDeployment(ctx, db.FinishDeploymentParams{ID: deploymentID, Status: "running"}); err != nil {
+		return err
+	}
+	log("Registry image deployment running at " + s.publicURL(project))
+	return nil
 }
 
 func (s *Service) runStaticFromWorkspace(ctx context.Context, project db.Project, deploymentID uuid.UUID, workspace string, log func(string)) error {
@@ -992,6 +1057,12 @@ func (s *Service) rollbackLocked(ctx context.Context, project db.Project, target
 			return fail(err)
 		}
 	} else {
+		if project.DeployMode == "image" {
+			log("Pulling rollback image " + strings.TrimSpace(*target.ImageTag))
+			if err := s.docker.Pull(ctx, strings.TrimSpace(*target.ImageTag), log); err != nil {
+				return fail(err)
+			}
+		}
 		envFile, err := s.writeProjectEnvFile(ctx, project.ID, workspace)
 		if err != nil {
 			return fail(err)
@@ -1312,10 +1383,10 @@ func logLocalhostEnvWarnings(log func(string), envs map[string]string, deployMod
 //   - The root workspace .env (already written above) is skipped.
 func generatePerServiceEnvFiles(workspace string, envs map[string]string, log func(string)) error {
 	templateNames := map[string]struct{}{
-		".env.example":         {},
-		".env.sample":          {},
-		".env.template":        {},
-		".env.local.example":   {},
+		".env.example":       {},
+		".env.sample":        {},
+		".env.template":      {},
+		".env.local.example": {},
 	}
 
 	generated := 0
