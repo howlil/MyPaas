@@ -18,9 +18,7 @@ services:
       retries: 5
 
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/nabilrn/mypaas-api:latest
     container_name: mypaas-api
     restart: always
     environment:
@@ -71,9 +69,7 @@ services:
         condition: service_healthy
 
   dashboard:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/nabilrn/mypaas-dashboard:latest
     container_name: mypaas-dashboard
     restart: always
     ports:
