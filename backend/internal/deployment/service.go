@@ -726,16 +726,21 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 }
 
 func (s *Service) runStaticFromWorkspace(ctx context.Context, project db.Project, deploymentID uuid.UUID, workspace string, log func(string)) error {
-	source, rel, err := staticdeploy.FindSiteRoot(workspace)
-	if err != nil {
-		// No pre-built static files found. Let's try to build it ephemerally.
+	var source, rel string
+	var err error
+
+	if needsStaticBuild(workspace) {
 		if buildErr := s.buildStaticSPA(ctx, project, deploymentID, workspace, log); buildErr != nil {
-			return fmt.Errorf("find site root failed (%v) and build failed: %w", err, buildErr)
+			return fmt.Errorf("static build failed: %w", buildErr)
 		}
-		// Try to find the site root again after building.
 		source, rel, err = staticdeploy.FindSiteRoot(workspace)
 		if err != nil {
 			return fmt.Errorf("could not find static output even after build: %w", err)
+		}
+	} else {
+		source, rel, err = staticdeploy.FindSiteRoot(workspace)
+		if err != nil {
+			return err
 		}
 	}
 

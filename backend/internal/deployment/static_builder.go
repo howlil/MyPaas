@@ -2,13 +2,33 @@ package deployment
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/google/uuid"
 	
 	"mypaas/internal/db"
 )
+
+func needsStaticBuild(workspace string) bool {
+	b, err := os.ReadFile(filepath.Join(workspace, "package.json"))
+	if err != nil {
+		return false
+	}
+	
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if err := json.Unmarshal(b, &pkg); err == nil {
+		if _, ok := pkg.Scripts["build"]; ok {
+			return true
+		}
+	}
+	return false
+}
 
 // buildStaticSPA spins up a temporary node container to build the static SPA.
 func (s *Service) buildStaticSPA(ctx context.Context, project db.Project, deploymentID uuid.UUID, workspace string, log func(string)) error {
