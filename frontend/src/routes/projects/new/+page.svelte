@@ -926,8 +926,33 @@
 
 	{#if error}
 		<div class="mb-5 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-200">
-			<p class="font-medium">Action blocked</p>
-			<p class="mt-1">{error}</p>
+			<div class="flex items-start justify-between">
+				<p class="font-medium">Action blocked</p>
+			</div>
+			
+			{#if error.includes('AI Prompt:\n')}
+				{@const parts = error.split('AI Prompt:\n')}
+				<p class="mt-1 whitespace-pre-wrap">{parts[0].trim()}</p>
+				<div class="mt-4 rounded-md bg-white/60 p-3 shadow-sm ring-1 ring-red-900/10 dark:bg-black/30 dark:ring-white/10 relative group">
+					<p class="mb-1 text-[10px] font-bold tracking-wider text-red-800/70 dark:text-red-300/70">SUGGESTED PROMPT</p>
+					<p class="font-mono text-xs leading-relaxed text-gray-800 dark:text-gray-200 whitespace-pre-wrap">{parts[1].trim()}</p>
+					<div class="absolute right-2 top-2 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+						<button
+							type="button"
+							class="rounded bg-white p-1.5 text-gray-500 shadow-sm ring-1 ring-gray-900/10 hover:bg-gray-50 hover:text-gray-900 dark:bg-gray-800 dark:text-gray-400 dark:ring-white/10 dark:hover:bg-gray-700 dark:hover:text-white"
+							on:click={() => {
+								navigator.clipboard.writeText(parts[1].trim());
+								toast.success('Prompt copied');
+							}}
+							title="Copy prompt"
+						>
+							<Copy size={14} />
+						</button>
+					</div>
+				</div>
+			{:else}
+				<p class="mt-1 whitespace-pre-wrap">{error}</p>
+			{/if}
 		</div>
 	{/if}
 
