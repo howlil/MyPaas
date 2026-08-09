@@ -1,23 +1,22 @@
 ## Build stage
-FROM node:20-slim AS builder
+FROM node:24-slim AS builder
 
 WORKDIR /build
 
-# Batasi pemakaian RAM compiler JS maksimal 1GB biar VM nggak kena OOM Killer
 ENV NODE_OPTIONS="--max_old_space_size=1024"
 
-COPY package.json ./
-# Install murni, skip audit dan fund biar super enteng dan cepat. Pakai legacy-peer-deps buat nge-bypass error versi vite
-RUN npm install --no-audit --no-fund --legacy-peer-deps
+RUN corepack enable pnpm
+
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 COPY . .
 
-RUN npm run build
-# Remove devDependencies to save space before copying to runtime
-RUN npm prune --omit=dev
+RUN pnpm build
+RUN pnpm prune --prod
 
 ## Runtime stage
-FROM node:20-slim
+FROM node:24-slim
 
 WORKDIR /app
 
