@@ -120,9 +120,10 @@ func run() error {
 		container.NewDockerCLI(cfg.DockerBindHost, cfg.ProjectNetwork),
 	)
 
-	// Recover missing containers (e.g. after VM migration or host reboot)
-	if err := routeReconciler.ReconcileMissingContainers(context.Background()); err != nil {
-		slog.Warn("failed to reconcile missing containers", "error", err)
+	// Recover missing container-backed runtimes. Static projects have no Docker
+	// stack and are recovered by Caddy route reconciliation instead.
+	if err := routeReconciler.ReconcileMissingRuntimes(context.Background()); err != nil {
+		slog.Warn("failed to reconcile missing runtimes", "error", err)
 	}
 
 	appCtx, stopBackground := context.WithCancel(context.Background())

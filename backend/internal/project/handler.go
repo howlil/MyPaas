@@ -99,23 +99,27 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		req.MemoryLimitMb = req.MemoryMb
 	}
 
-	project, err := h.service.Create(r.Context(), CreateInput{
-		UserID:               user.ID,
-		Name:                 req.Name,
-		RepoURL:              req.RepoURL,
-		Branch:               req.Branch,
-		DeployMode:           req.DeployMode,
-		ResourceProfile:      req.ResourceProfile,
-		MainService:          req.MainService,
-		AppPort:              req.AppPort,
-		MemoryLimitMb:        req.MemoryLimitMb,
-		CPULimit:             req.CPULimit,
-		ComposeFilePath:      req.ComposeFilePath,
-		ComposeOverridePaths: req.ComposeOverridePaths,
-		ComposeProfiles:      req.ComposeProfiles,
-		ComposeWorkdir:       req.ComposeWorkdir,
-		StaticFrontendPath:   req.StaticFrontendPath,
-		BaseDirectory:        req.BaseDirectory,
+	project, err := h.service.CreateValidated(r.Context(), CreateValidationInput{
+		Project: CreateInput{
+			UserID:               user.ID,
+			Name:                 req.Name,
+			RepoURL:              req.RepoURL,
+			Branch:               req.Branch,
+			DeployMode:           req.DeployMode,
+			ResourceProfile:      req.ResourceProfile,
+			MainService:          req.MainService,
+			AppPort:              req.AppPort,
+			MemoryLimitMb:        req.MemoryLimitMb,
+			CPULimit:             req.CPULimit,
+			ComposeFilePath:      req.ComposeFilePath,
+			ComposeOverridePaths: req.ComposeOverridePaths,
+			ComposeProfiles:      req.ComposeProfiles,
+			ComposeWorkdir:       req.ComposeWorkdir,
+			StaticFrontendPath:   req.StaticFrontendPath,
+			BaseDirectory:        req.BaseDirectory,
+		},
+		EnvVars:        req.EnvVars,
+		SharedPostgres: req.SharedPostgres,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
@@ -160,19 +164,21 @@ func (h *Handler) cleanupCreatedProject(r *http.Request, id uuid.UUID) {
 
 func (h *Handler) DetectMode(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RepoURL     string `json:"repoUrl"`
-		Branch      string `json:"branch"`
-		InspectOnly bool   `json:"inspectOnly"`
+		RepoURL       string `json:"repoUrl"`
+		Branch        string `json:"branch"`
+		InspectOnly   bool   `json:"inspectOnly"`
+		BaseDirectory string `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
 		return
 	}
 
-	result, err := h.service.DetectMode(r.Context(), DetectInput{
-		RepoURL:     req.RepoURL,
-		Branch:      req.Branch,
-		InspectOnly: req.InspectOnly,
+	result, err := h.service.DetectModeValidated(r.Context(), DetectInput{
+		RepoURL:       req.RepoURL,
+		Branch:        req.Branch,
+		InspectOnly:   req.InspectOnly,
+		BaseDirectory: req.BaseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
@@ -183,8 +189,9 @@ func (h *Handler) DetectMode(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DetectCompose(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RepoURL string `json:"repoUrl"`
-		Branch  string `json:"branch"`
+		RepoURL       string `json:"repoUrl"`
+		Branch        string `json:"branch"`
+		BaseDirectory string `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
@@ -192,8 +199,9 @@ func (h *Handler) DetectCompose(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.service.DetectCompose(r.Context(), DetectComposeInput{
-		RepoURL: req.RepoURL,
-		Branch:  req.Branch,
+		RepoURL:       req.RepoURL,
+		Branch:        req.Branch,
+		BaseDirectory: req.BaseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
@@ -238,7 +246,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		req.MemoryLimitMb = req.MemoryMb
 	}
 
-	project, err := h.service.Update(r.Context(), UpdateInput{
+	project, err := h.service.UpdateValidated(r.Context(), UpdateInput{
 		ID:                   id,
 		Name:                 req.Name,
 		Branch:               req.Branch,
