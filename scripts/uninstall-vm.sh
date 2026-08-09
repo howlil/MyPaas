@@ -92,3 +92,11 @@ if [[ -f "$ENV_FILE" ]]; then
 fi
 
 log "Uninstall complete. MyPaas has been totally destroyed."
+
+# Change directory before deleting the source folder to prevent errors
+cd /
+if [[ -d "$ROOT_DIR" && "$ROOT_DIR" != "/" ]]; then
+  echo "==> Removing MyPaas source folder ($ROOT_DIR)..."
+  sudo_cmd rm -rf "$ROOT_DIR"
+fi
+
