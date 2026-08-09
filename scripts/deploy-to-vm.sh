@@ -79,7 +79,8 @@ $DOCKER_BIN run --rm \
   -database "$MIGRATE_DATABASE_URL" \
   up
 
-echo "Building and starting MyPaas..."
-$COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --build
+echo "Pulling and starting MyPaas..."
+$COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull
+$COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 
 echo "MyPaas production stack is starting. Run scripts/verify-production.sh after the containers settle."
