@@ -11,17 +11,16 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 
 RUN pnpm build
+# Remove devDependencies to save space before copying to runtime
+RUN pnpm prune --prod
 
 ## Runtime stage
 FROM node:20-alpine
 
 WORKDIR /app
 
-RUN corepack enable pnpm
-
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod
-
+COPY package.json ./
+COPY --from=builder /build/node_modules ./node_modules
 COPY --from=builder /build/build ./build
 
 EXPOSE 3000
