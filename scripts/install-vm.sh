@@ -22,6 +22,7 @@ WIZARD_HOST="${WIZARD_HOST:-127.0.0.1}"
 WIZARD_PORT="${WIZARD_PORT:-8787}"
 WIZARD_PUBLIC_TUNNEL="${WIZARD_PUBLIC_TUNNEL:-true}"
 
+USE_PODMAN="${USE_PODMAN:-false}"
 MIGRATE_URL="${MIGRATE_URL:-}"
 
 while [[ $# -gt 0 ]]; do
@@ -30,11 +31,16 @@ while [[ $# -gt 0 ]]; do
       MIGRATE_URL="$2"
       shift 2
       ;;
+    --podman)
+      USE_PODMAN="true"
+      shift
+      ;;
     *)
       break
       ;;
   esac
 done
+
 
 cd "$ROOT_DIR"
 
@@ -185,10 +191,17 @@ install_docker_debian() {
     | sudo_cmd tee /etc/apt/sources.list.d/docker.list >/dev/null
 
   sudo_cmd apt-get update
-  sudo_cmd apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin git openssl
-
-  if command_exists systemctl; then
-    sudo_cmd systemctl enable --now docker >/dev/null 2>&1 || true
+  if [[ "$USE_PODMAN" == "true" ]]; then
+    sudo_cmd apt-get install -y podman docker-ce-cli docker-compose-plugin git openssl
+    if command_exists systemctl; then
+      sudo_cmd systemctl enable --now podman.socket >/dev/null 2>&1 || true
+    fi
+    sudo_cmd ln -sf /run/podman/podman.sock /var/run/docker.sock || true
+  else
+    sudo_cmd apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin git openssl
+    if command_exists systemctl; then
+      sudo_cmd systemctl enable --now docker >/dev/null 2>&1 || true
+    fi
   fi
 }
 
@@ -196,14 +209,22 @@ ensure_dependencies() {
   [[ "$(uname -s)" == "Linux" ]] || die "install-vm.sh must run on a Linux VM"
   ensure_openssl
 
-  if ! command_exists docker || ! docker compose version >/dev/null 2>&1; then
-    if [[ "$SKIP_DOCKER_INSTALL" == "true" ]]; then
-      die "Docker with Compose plugin is required"
+  if [[ "$USE_PODMAN" == "true" ]]; then
+    if ! command_exists podman || ! docker compose version >/dev/null 2>&1; then
+      log "Installing Podman Engine and Compose plugin"
+      command_exists apt-get || die "automatic dependency install requires apt-get."
+      install_docker_debian
     fi
+  else
+    if ! command_exists docker || ! docker compose version >/dev/null 2>&1; then
+      if [[ "$SKIP_DOCKER_INSTALL" == "true" ]]; then
+        die "Docker with Compose plugin is required"
+      fi
 
-    log "Installing Docker Engine and Compose plugin"
-    command_exists apt-get || die "automatic dependency install requires apt-get. Install Docker manually, then rerun with SKIP_DOCKER_INSTALL=true"
-    install_docker_debian
+      log "Installing Docker Engine and Compose plugin"
+      command_exists apt-get || die "automatic dependency install requires apt-get. Install Docker manually, then rerun with SKIP_DOCKER_INSTALL=true"
+      install_docker_debian
+    fi
   fi
 }
 
