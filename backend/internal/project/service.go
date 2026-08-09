@@ -305,23 +305,18 @@ func detectModeOnBranch(ctx context.Context, repoURL, branch string) (DetectResu
 	}
 	
 	// Vibecoder Fallback: use nixpacks plan
-	plan, err := nixpacks.PlanWorkspace(ctx, workspace)
-	if err == nil && plan != nil {
-		if isStaticSPA(workspace) {
-			return DetectResult{DeployMode: "static", Branch: branch, HasDockerfile: false, EnvVars: envVars, AppPort: 80, Tree: tree, TreeTruncated: treeTruncated}, nil
-		}
-		
-		// If Nixpacks detects something but it's not a static SPA, we reject it
-		// and provide the AI prompt so the user can generate a Dockerfile.
-		prompt := "I am deploying my project to a Docker-based platform. Please generate a production-ready, multi-stage Dockerfile for my project. The final stage must expose port 3000 and run the app. Make it as memory-efficient as possible using Alpine images."
-		providers := ""
-		if len(plan.Providers) > 0 {
-			providers = fmt.Sprintf(" (Detected: %s)", strings.Join(plan.Providers, ", "))
-		}
-		return DetectResult{}, fmt.Errorf("%w: SSR/Backend Runtime Detected%s. Please add a Dockerfile.\n\nAI Prompt:\n%s", errs.ErrNoDeployConfig, providers, prompt)
+	plan, _ := nixpacks.PlanWorkspace(ctx, workspace)
+	if plan != nil && isStaticSPA(workspace) {
+		return DetectResult{DeployMode: "static", Branch: branch, HasDockerfile: false, EnvVars: envVars, AppPort: 80, Tree: tree, TreeTruncated: treeTruncated}, nil
 	}
-
-	return DetectResult{}, fmt.Errorf("%w: no deploy config found on branch %q", errs.ErrNoDeployConfig, branch)
+	
+	// If it's not a static SPA (or if nixpacks failed), reject it and provide the AI prompt
+	prompt := "I am deploying my project to a Docker-based platform. Please generate a production-ready, multi-stage Dockerfile for my project. The final stage must expose port 3000 and run the app. Make it as memory-efficient as possible using Alpine images."
+	providers := ""
+	if plan != nil && len(plan.Providers) > 0 {
+		providers = fmt.Sprintf(" (Detected: %s)", strings.Join(plan.Providers, ", "))
+	}
+	return DetectResult{}, fmt.Errorf("%w: SSR/Backend Runtime Detected%s. Please add a Dockerfile.\n\nAI Prompt:\n%s", errs.ErrNoDeployConfig, providers, prompt)
 }
 
 func isStaticSPA(workspace string) bool {
