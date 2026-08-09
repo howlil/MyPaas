@@ -2,6 +2,7 @@
   "name": "mypaas-dashboard",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.22.0",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -41,5 +42,8 @@
   "type": "module",
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild"]
+  },
+  "configDependencies": {
+    "esbuild": "*"
   }
 }
