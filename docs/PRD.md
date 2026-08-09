@@ -201,7 +201,10 @@ Wildcard hostname `*.nabilrizkinavisa.me` di Cloudflare Tunnel mengarah ke `loca
 - **Static mode:** repo memiliki output static dengan `index.html` di `dist`, `build`, `public`, atau root; diserve langsung oleh Caddy tanpa container app
 
 **FR-DEPLOY-2** Auto-detection priority: Compose file > Dockerfile > Static output. Jika beberapa ada, prioritas tertinggi dipakai.
-**FR-DEPLOY-3** Jika tidak ada Dockerfile, Compose file, maupun static `index.html`, deployment gagal dengan error message yang jelas.
+**FR-DEPLOY-3** Jika tidak ada Dockerfile atau Compose file, MyPaas mengeksekusi "Vibecoder Fallback Strategy" menggunakan Nixpacks Analyzer (read-only):
+- MyPaas menjalankan `nixpacks plan . -o json` di background.
+- **Jika terdeteksi purely static SPA** (misal: Vite/React statis), MyPaas mengambil build command, mengeksekusinya di container builder sementara, dan mendeploy outputnya ke Caddy (Zero Container Static Hosting).
+- **Jika terdeteksi SSR/Backend** (Next.js Node, Go, Python), deployment digagalkan dengan error message ramah vibecoder: *"SSR/Backend Runtime Detected. Please add a Dockerfile."* beserta **AI Prompt** yang siap di-copy-paste user ke ChatGPT/Claude untuk men-generate Dockerfile multi-stage yang efisien (memaksa delegasi tech-stack ke AI).
 **FR-DEPLOY-4** Flow deployment Dockerfile mode:
 1. Terima trigger (manual deploy / webhook)
 2. Enqueue deployment job (async)
