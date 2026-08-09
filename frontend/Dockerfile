@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 
 WORKDIR /build
 
-RUN npm install -g pnpm
+RUN corepack enable pnpm
 
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
@@ -17,7 +17,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-RUN npm install -g pnpm
+RUN corepack enable pnpm
 
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile --prod
