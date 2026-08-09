@@ -162,6 +162,19 @@ ensure_python3() {
   sudo_cmd apt-get install -y python3
 }
 
+ensure_nixpacks() {
+  if command_exists nixpacks; then
+    return
+  fi
+  log "Installing Nixpacks CLI..."
+  if ! command_exists curl; then
+    command_exists apt-get || die "curl is required to install nixpacks"
+    sudo_cmd apt-get update
+    sudo_cmd apt-get install -y curl
+  fi
+  curl -sSL https://nixpacks.com/install.sh | sudo_cmd bash
+}
+
 install_docker_debian() {
   if ! command_exists curl || ! command_exists gpg; then
     sudo_cmd apt-get update
@@ -208,6 +221,7 @@ install_docker_debian() {
 ensure_dependencies() {
   [[ "$(uname -s)" == "Linux" ]] || die "install-vm.sh must run on a Linux VM"
   ensure_openssl
+  ensure_nixpacks
 
   if [[ "$USE_PODMAN" == "true" ]]; then
     if ! command_exists podman || ! docker compose version >/dev/null 2>&1; then

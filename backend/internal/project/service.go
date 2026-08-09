@@ -30,6 +30,7 @@ import (
 	"mypaas/internal/db"
 	"mypaas/internal/envdiscover"
 	"mypaas/internal/errs"
+	"mypaas/internal/nixpacks"
 	"mypaas/internal/quota"
 	"mypaas/internal/resourceprofile"
 	"mypaas/internal/staticdeploy"
@@ -302,7 +303,45 @@ func detectModeOnBranch(ctx context.Context, repoURL, branch string) (DetectResu
 	if _, _, err := staticdeploy.FindSiteRoot(workspace); err == nil {
 		return DetectResult{DeployMode: "static", Branch: branch, HasDockerfile: false, EnvVars: envVars, AppPort: 80, Tree: tree, TreeTruncated: treeTruncated}, nil
 	}
+	
+	// Vibecoder Fallback: use nixpacks plan
+	plan, err := nixpacks.PlanWorkspace(ctx, workspace)
+	if err == nil && plan != nil {
+		if isStaticSPA(workspace) {
+			return DetectResult{DeployMode: "static", Branch: branch, HasDockerfile: false, EnvVars: envVars, AppPort: 80, Tree: tree, TreeTruncated: treeTruncated}, nil
+		}
+		
+		// If Nixpacks detects something but it's not a static SPA, we reject it
+		// and provide the AI prompt so the user can generate a Dockerfile.
+		prompt := "I am deploying my project to a Docker-based platform. Please generate a production-ready, multi-stage Dockerfile for my project. The final stage must expose port 3000 and run the app. Make it as memory-efficient as possible using Alpine images."
+		providers := ""
+		if len(plan.Providers) > 0 {
+			providers = fmt.Sprintf(" (Detected: %s)", strings.Join(plan.Providers, ", "))
+		}
+		return DetectResult{}, fmt.Errorf("%w: SSR/Backend Runtime Detected%s. Please add a Dockerfile.\n\nAI Prompt:\n%s", errs.ErrNoDeployConfig, providers, prompt)
+	}
+
 	return DetectResult{}, fmt.Errorf("%w: no deploy config found on branch %q", errs.ErrNoDeployConfig, branch)
+}
+
+func isStaticSPA(workspace string) bool {
+	b, err := os.ReadFile(filepath.Join(workspace, "package.json"))
+	if err != nil {
+		return false
+	}
+	content := string(b)
+	
+	// If it has SSR/Backend frameworks, it's not an SPA
+	if strings.Contains(content, `"next"`) || strings.Contains(content, `"nuxt"`) || strings.Contains(content, `"@nestjs/core"`) {
+		return false
+	}
+	
+	// If it has SPA frameworks/bundlers
+	if strings.Contains(content, `"vite"`) || strings.Contains(content, `"react-scripts"`) || strings.Contains(content, `"@sveltejs/adapter-static"`) || strings.Contains(content, `"astro"`) || strings.Contains(content, `"vue-cli-service"`) {
+		return true
+	}
+	
+	return false
 }
 
 func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, error) {
