@@ -428,8 +428,8 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
                 <strong>You need a domain you control.</strong>
                 <p>MyPaas uses this domain as its base address. The dashboard runs at <code>https://your-domain</code>, and deployed projects get subdomains under it.</p>
                 <div class="example-grid">
-                  <div class="example-row"><span>Dashboard</span><code id="example-dashboard">https://mypaas.example.com</code></div>
-                  <div class="example-row"><span>Project</span><code id="example-project">https://todo.mypaas.example.com</code></div>
+                  <div class="example-row"><span>Dashboard</span><code id="example-dashboard">https://example.com</code></div>
+                  <div class="example-row"><span>Projects</span><code id="example-project">https://todo.example.com</code></div>
                 </div>
               </div>
               <div class="guide-card">
@@ -441,13 +441,13 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
                   <li>Wait until Cloudflare shows the domain as active before testing MyPaas routes.</li>
                 </ol>
               </div>
-              <div class="notice">Example: if you enter <code>example.com</code>, a project named <code>crud</code> will route to <code>crud.example.com</code>.</div>
+              <div class="notice">Note: If you use a dedicated subdomain like <code>panel.example.com</code>, projects will route to <code>todo.panel.example.com</code>.</div>
             </div>
             <div class="grid">
               <div class="field">
                 <label for="PUBLIC_DOMAIN">Public MyPaas domain</label>
-                <input id="PUBLIC_DOMAIN" name="PUBLIC_DOMAIN" required inputmode="url" autocomplete="off" placeholder="mypaas.example.com" value="{esc(domain)}">
-                <span class="hint">Use the hostname only, without <code>https://</code>. A dedicated subdomain like <code>mypaas.example.com</code> is recommended.</span>
+                <input id="PUBLIC_DOMAIN" name="PUBLIC_DOMAIN" required inputmode="url" autocomplete="off" placeholder="example.com" value="{esc(domain)}">
+                <span class="hint">Use the hostname only, without <code>https://</code>. For example: <code>example.com</code> or <code>panel.example.com</code>.</span>
               </div>
               <div class="field">
                 <label for="OWNER_EMAIL">Owner GitHub primary email</label>

@@ -267,8 +267,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.cleanup != nil {
 		if err := h.cleanup(r, id); err != nil {
-			httpx.DomainError(w, err)
-			return
+			slog.Warn("project cleanup encountered errors during deletion", "projectId", id, "error", err)
 		}
 	}
 	if err := h.service.Delete(r.Context(), id); err != nil {
