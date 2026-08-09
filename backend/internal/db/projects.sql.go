@@ -32,13 +32,13 @@ INSERT INTO projects (
     user_id, name, repo_url, branch, subdomain, deploy_mode,
     resource_profile, main_service, app_port, webhook_secret, memory_limit_mb, cpu_limit,
     compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
-    service_resources, static_frontend_path
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    service_resources, static_frontend_path, base_directory
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 RETURNING id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service,
           app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
           status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
           compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
-          service_resources, static_frontend_path
+          service_resources, static_frontend_path, base_directory
 `
 
 type CreateProjectParams struct {
@@ -60,6 +60,7 @@ type CreateProjectParams struct {
 	ComposeWorkdir       *string         `json:"compose_workdir"`
 	ServiceResources     json.RawMessage `json:"service_resources"`
 	StaticFrontendPath   *string         `json:"static_frontend_path"`
+	BaseDirectory        *string         `json:"base_directory"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (Project, error) {
@@ -82,6 +83,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		arg.ComposeWorkdir,
 		arg.ServiceResources,
 		arg.StaticFrontendPath,
+		arg.BaseDirectory,
 	)
 	var i Project
 	err := row.Scan(
@@ -110,6 +112,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.ComposeWorkdir,
 		&i.ServiceResources,
 		&i.StaticFrontendPath,
+		&i.BaseDirectory,
 	)
 	return i, err
 }
@@ -139,7 +142,7 @@ SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
        compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
-       service_resources, static_frontend_path
+       service_resources, static_frontend_path, base_directory
 FROM projects
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -173,6 +176,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 		&i.ComposeWorkdir,
 		&i.ServiceResources,
 		&i.StaticFrontendPath,
+		&i.BaseDirectory,
 	)
 	return i, err
 }
@@ -182,7 +186,7 @@ SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
        compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
-       service_resources, static_frontend_path
+       service_resources, static_frontend_path, base_directory
 FROM projects
 WHERE name = $1 AND deleted_at IS NULL
 `
@@ -216,6 +220,7 @@ func (q *Queries) GetProjectByName(ctx context.Context, name string) (Project, e
 		&i.ComposeWorkdir,
 		&i.ServiceResources,
 		&i.StaticFrontendPath,
+		&i.BaseDirectory,
 	)
 	return i, err
 }
@@ -273,7 +278,7 @@ SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
        compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
-       service_resources, static_frontend_path
+       service_resources, static_frontend_path, base_directory
 FROM projects
 WHERE user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -314,6 +319,7 @@ func (q *Queries) ListProjectsByUser(ctx context.Context, userID uuid.UUID) ([]P
 			&i.ComposeWorkdir,
 			&i.ServiceResources,
 			&i.StaticFrontendPath,
+			&i.BaseDirectory,
 		); err != nil {
 			return nil, err
 		}
@@ -330,7 +336,7 @@ SELECT id, user_id, name, repo_url, branch, subdomain, deploy_mode, main_service
        app_port, webhook_secret, allocated_port, memory_limit_mb, cpu_limit,
        status, active_deployment_id, created_at, updated_at, deleted_at, resource_profile,
        compose_file_path, compose_override_paths, compose_profiles, compose_workdir,
-       service_resources, static_frontend_path
+       service_resources, static_frontend_path, base_directory
 FROM projects
 WHERE status = 'running'
   AND deleted_at IS NULL
@@ -372,6 +378,7 @@ func (q *Queries) ListRoutableProjects(ctx context.Context) ([]Project, error) {
 			&i.ComposeWorkdir,
 			&i.ServiceResources,
 			&i.StaticFrontendPath,
+			&i.BaseDirectory,
 		); err != nil {
 			return nil, err
 		}
@@ -463,6 +470,7 @@ SET name                 = $2,
     compose_workdir      = $13,
     service_resources    = $14,
     static_frontend_path = $15,
+    base_directory       = $16,
     updated_at           = NOW()
 WHERE id = $1 AND deleted_at IS NULL
 `
@@ -483,6 +491,7 @@ type UpdateProjectParams struct {
 	ComposeWorkdir       *string         `json:"compose_workdir"`
 	ServiceResources     json.RawMessage `json:"service_resources"`
 	StaticFrontendPath   *string         `json:"static_frontend_path"`
+	BaseDirectory        *string         `json:"base_directory"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) error {
@@ -502,6 +511,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) er
 		arg.ComposeWorkdir,
 		arg.ServiceResources,
 		arg.StaticFrontendPath,
+		arg.BaseDirectory,
 	)
 	return err
 }

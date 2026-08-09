@@ -88,6 +88,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		ComposeOverridePaths []string       `json:"composeOverridePaths"`
 		ComposeProfiles      []string       `json:"composeProfiles"`
 		ComposeWorkdir       *string        `json:"composeWorkdir"`
+		StaticFrontendPath   *string        `json:"staticFrontendPath"`
+		BaseDirectory        *string        `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
@@ -112,6 +114,8 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		ComposeOverridePaths: req.ComposeOverridePaths,
 		ComposeProfiles:      req.ComposeProfiles,
 		ComposeWorkdir:       req.ComposeWorkdir,
+		StaticFrontendPath:   req.StaticFrontendPath,
+		BaseDirectory:        req.BaseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
@@ -210,19 +214,21 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name                 string   `json:"name"`
-		Branch               string   `json:"branch"`
-		ResourceProfile      string   `json:"resourceProfile"`
-		MainService          *string  `json:"mainService"`
-		AppPort              int32    `json:"appPort"`
-		MemoryLimitMb        int32    `json:"memoryLimitMb"`
-		MemoryMb             int32    `json:"memoryMb"`
-		CPULimit             float64  `json:"cpuLimit"`
-		ComposeFilePath      *string  `json:"composeFilePath"`
-		ComposeOverridePaths []string `json:"composeOverridePaths"`
-		ComposeProfiles      []string `json:"composeProfiles"`
-		ComposeWorkdir       *string  `json:"composeWorkdir"`
+		Name                 string          `json:"name"`
+		Branch               string          `json:"branch"`
+		ResourceProfile      string          `json:"resourceProfile"`
+		MainService          *string         `json:"mainService"`
+		AppPort              int32           `json:"appPort"`
+		MemoryLimitMb        int32           `json:"memoryLimitMb"`
+		MemoryMb             int32           `json:"memoryMb"`
+		CPULimit             float64         `json:"cpuLimit"`
+		ComposeFilePath      *string         `json:"composeFilePath"`
+		ComposeOverridePaths []string        `json:"composeOverridePaths"`
+		ComposeProfiles      []string        `json:"composeProfiles"`
+		ComposeWorkdir       *string         `json:"composeWorkdir"`
 		ServiceResources     json.RawMessage `json:"serviceResources"`
+		StaticFrontendPath   *string         `json:"staticFrontendPath"`
+		BaseDirectory        *string         `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
@@ -246,6 +252,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		ComposeProfiles:      req.ComposeProfiles,
 		ComposeWorkdir:       req.ComposeWorkdir,
 		ServiceResources:     req.ServiceResources,
+		StaticFrontendPath:   req.StaticFrontendPath,
+		BaseDirectory:        req.BaseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)

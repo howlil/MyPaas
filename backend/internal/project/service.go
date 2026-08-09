@@ -65,6 +65,7 @@ type CreateInput struct {
 	ComposeWorkdir       *string
 	ServiceResources     json.RawMessage
 	StaticFrontendPath   *string
+	BaseDirectory        *string
 }
 
 type UpdateInput struct {
@@ -82,6 +83,7 @@ type UpdateInput struct {
 	ComposeWorkdir       *string
 	ServiceResources     json.RawMessage
 	StaticFrontendPath   *string
+	BaseDirectory        *string
 }
 
 type DetectInput struct {
@@ -460,6 +462,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, er
 		ComposeWorkdir:       input.ComposeWorkdir,
 		ServiceResources:     input.ServiceResources,
 		StaticFrontendPath:   input.StaticFrontendPath,
+		BaseDirectory:        input.BaseDirectory,
 	})
 	if err != nil {
 		if isProjectUniqueViolation(err) {
@@ -587,6 +590,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 		ComposeWorkdir:       composeWorkdir,
 		ServiceResources:     serviceResources,
 		StaticFrontendPath:   input.StaticFrontendPath,
+		BaseDirectory:        input.BaseDirectory,
 	}); err != nil {
 		if isProjectUniqueViolation(err) {
 			return db.Project{}, errs.ErrProjectNameTaken

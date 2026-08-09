@@ -636,6 +636,12 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 	if len(shortSHA) > 12 {
 		shortSHA = shortSHA[:12]
 	}
+
+	if project.BaseDirectory != nil && *project.BaseDirectory != "" {
+		workspace = filepath.Join(workspace, filepath.Clean("/"+*project.BaseDirectory))
+		log("Using base directory: " + *project.BaseDirectory)
+	}
+
 	var imageTag *string
 	if project.DeployMode == "dockerfile" {
 		tag := fmt.Sprintf("mypaas/%s:%s", project.Name, shortSHA)

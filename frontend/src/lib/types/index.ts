@@ -43,6 +43,7 @@ export interface Project {
 	composeWorkdir:       string | null;
 	serviceResources:    Record<string, { memoryLimitMb: number; cpuLimit: number }>;
 	staticFrontendPath:   string | null;
+	baseDirectory:        string | null;
 	createdAt:            string;
 	updatedAt:            string;
 }

@@ -86,7 +86,8 @@
 		composeOverridePaths: '',
 		composeProfiles: '',
 		composeWorkdir: '',
-		staticFrontendPath: ''
+		staticFrontendPath: '',
+		baseDirectory: ''
 	};
 	let staticFrontendCandidates: string[] = [];
 
@@ -859,7 +860,9 @@
 				composeOverridePaths,
 				composeProfiles,
 				composeWorkdir,
-				staticFrontendPath: form.staticFrontendPath || null
+				serviceResources: form.serviceResources,
+				staticFrontendPath: form.staticFrontendPath || null,
+				baseDirectory: form.baseDirectory.trim() || null
 			});
 			toast.success('Project created');
 			await goto(`/projects/${project.id}`);
@@ -1014,6 +1017,17 @@
 								Refresh
 							</ActionButton>
 						</div>
+					</div>
+					<div>
+						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="baseDirectory">Base directory</label>
+						<input
+							id="baseDirectory"
+							type="text"
+							bind:value={form.baseDirectory}
+							placeholder="/"
+							class="field w-full font-mono"
+						/>
+						<p class="mt-1 text-[11px] text-gray-500">Deploy from a specific subdirectory. E.g. <code>frontend</code> or <code>backend/api</code>.</p>
 					</div>
 				</div>
 				{#if repoInspectError}

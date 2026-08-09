@@ -30,6 +30,7 @@
 	let composeProfiles      = '';
 	let composeWorkdir       = '';
 	let staticFrontendPath   = '';
+	let baseDirectory        = '';
 	let serviceResourcesStr  = '{}';
 	let deleteInput = '';
 	let showWebhookSecret = false;
@@ -60,6 +61,7 @@
 	                 (project.deployMode === 'compose' && composeOverridePaths !== (project.composeOverridePaths || []).join(', ')) ||
 	                 (project.deployMode === 'compose' && composeProfiles !== (project.composeProfiles || []).join(', ')) ||
 	                 staticFrontendPath !== (project.staticFrontendPath || '') ||
+	                 baseDirectory !== (project.baseDirectory || '') ||
 	                 serviceResourcesStr !== JSON.stringify(project.serviceResources || {}) ||
 	                 resourceProfile !== project.resourceProfile ||
 	                 memoryMb !== project.memoryLimitMb || cpuLimit !== project.cpuLimit);
@@ -96,6 +98,7 @@
 			composeProfiles = (project.composeProfiles ?? []).join(', ');
 			composeWorkdir = project.composeWorkdir ?? '';
 			staticFrontendPath = project.staticFrontendPath ?? '';
+			baseDirectory = project.baseDirectory ?? '';
 			serviceResourcesStr = JSON.stringify(project.serviceResources || {}, null, 2);
 			if (project.deployMode === 'compose') {
 				await loadComposeResources(project.id);
@@ -152,6 +155,7 @@
 				memoryLimitMb: Number(memoryMb),
 				cpuLimit: Number(cpuLimit),
 				staticFrontendPath: staticFrontendPath.trim() || null,
+				baseDirectory: baseDirectory.trim() || null,
 				serviceResources: parsedResources
 			};
 			if (project.deployMode === 'compose') {
@@ -295,6 +299,11 @@
 					<div>
 						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="pbranch">Deploy branch</label>
 						<input id="pbranch" type="text" bind:value={branch} class="field w-full font-mono" />
+					</div>
+					<div>
+						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="baseDirectory">Base directory</label>
+						<input id="baseDirectory" type="text" bind:value={baseDirectory} placeholder="/" class="field w-full font-mono" />
+						<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Deploy from a specific subdirectory instead of the repo root.</p>
 					</div>
 					{#if project.deployMode !== 'static'}
 						<div>

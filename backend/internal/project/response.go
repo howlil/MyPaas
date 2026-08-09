@@ -36,6 +36,8 @@ type Response struct {
 	ComposeProfiles      []string `json:"composeProfiles"`
 	ComposeWorkdir       *string  `json:"composeWorkdir"`
 	ServiceResources     json.RawMessage `json:"serviceResources"`
+	StaticFrontendPath   *string  `json:"staticFrontendPath"`
+	BaseDirectory        *string  `json:"baseDirectory"`
 	CreatedAt            string   `json:"createdAt"`
 	UpdatedAt            string   `json:"updatedAt"`
 }
@@ -87,6 +89,8 @@ func ResponseFromDB(project db.Project) Response {
 		ComposeProfiles:      project.ComposeProfiles,
 		ComposeWorkdir:       project.ComposeWorkdir,
 		ServiceResources:     project.ServiceResources,
+		StaticFrontendPath:   project.StaticFrontendPath,
+		BaseDirectory:        project.BaseDirectory,
 		CreatedAt:          formatTimestamp(project.CreatedAt.Time, project.CreatedAt.Valid),
 		UpdatedAt:          formatTimestamp(project.UpdatedAt.Time, project.UpdatedAt.Valid),
 	}
