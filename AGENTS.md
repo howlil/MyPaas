@@ -424,7 +424,6 @@ make sqlc             # Generate sqlc code
 
 - `docs/PRD.md` — source of truth scope & requirement
 - `docs/ARCHITECTURE.md` — detail teknis, diagram
-- `docs/TIMELINE.md` — implementation timeline (15 hari)
 - `docs/adr/` — architecture decision records
 - `.env.example` — template env variables
 
