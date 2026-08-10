@@ -1,0 +1,201 @@
+name: Apply detection-first port UX patch
+
+on:
+  push:
+    branches:
+      - contrib/auto-detect-app-port
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[port-patch-done]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: contrib/auto-detect-app-port
+      - name: Patch project create UX
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('frontend/src/routes/projects/new/+page.svelte')
+          text = path.read_text()
+
+          def replace_once(old: str, new: str):
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one match, found {count}: {old[:120]!r}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "\timport { projectHost, projectURL } from '$lib/utils/urls';\n",
+              "\timport { projectHost, projectURL } from '$lib/utils/urls';\n\timport { resolveProjectAppPort } from '$lib/validation/project';\n",
+          )
+          replace_once(
+              "\ttype PortSource = 'fallback' | 'detected' | 'manual' | 'static';",
+              "\ttype PortSource = 'unresolved' | 'detected' | 'manual' | 'static';",
+          )
+          replace_once("\n\tconst DEFAULT_APP_PORT = '80';", "")
+          replace_once(
+              "\tlet appPortSource: PortSource = 'fallback';",
+              "\tlet appPortSource: PortSource = 'unresolved';",
+          )
+          replace_once(
+              "\t$: effectiveAppPort = form.deployMode === 'static' ? '80' : form.appPort || DEFAULT_APP_PORT;",
+              "\t$: effectiveAppPort = form.deployMode === 'static' ? '80' : form.appPort || 'Not detected';",
+          )
+          replace_once(
+              "\t$: portStateLabel = form.deployMode === 'static'\n\t\t? 'Static file server'\n\t\t: appPortSource === 'detected'\n\t\t\t? 'Detected from repository'\n\t\t\t: appPortSource === 'manual'\n\t\t\t\t? 'Manual override'\n\t\t\t\t: 'Fallback if detection finds no port';",
+              "\t$: portStateLabel = form.deployMode === 'static'\n\t\t? 'Managed by Caddy'\n\t\t: appPortSource === 'detected'\n\t\t\t? 'Detected from repository'\n\t\t\t: appPortSource === 'manual'\n\t\t\t\t? 'Advanced manual override'\n\t\t\t\t: 'Not detected yet';",
+          )
+          replace_once(
+              "\t$: composeDisabledReason = composeBlockingIssues[0]?.message\n\t\t?? (missingRequiredEnvKeys.length > 0 ? `Fill required env values: ${missingRequiredEnvKeys.slice(0, 3).join(', ')}${missingRequiredEnvKeys.length > 3 ? '...' : ''}` : '');",
+              "\t$: composeDisabledReason = composeBlockingIssues[0]?.message\n\t\t?? (missingRequiredEnvKeys.length > 0 ? `Fill required env values: ${missingRequiredEnvKeys.slice(0, 3).join(', ')}${missingRequiredEnvKeys.length > 3 ? '...' : ''}` : '');\n\t$: runtimePortMissing = form.deployMode !== 'static' && form.deployMode !== 'auto' && !form.appPort.trim();",
+          )
+          replace_once(
+              "\t\t&& sourceReady\n\t\t&& !composeDisabledReason",
+              "\t\t&& sourceReady\n\t\t&& !runtimePortMissing\n\t\t&& !composeDisabledReason",
+          )
+          replace_once(
+              "\t\t\t\t\t\t: form.sourceType === 'git' && !repositoryInspectionCurrent\n\t\t\t\t\t\t\t? 'Repository validation is required for the current branch and base directory'\n\t\t\t\t\t\t\t: composeDisabledReason",
+              "\t\t\t\t\t\t: form.sourceType === 'git' && !repositoryInspectionCurrent\n\t\t\t\t\t\t\t? 'Repository validation is required for the current branch and base directory'\n\t\t\t\t\t\t\t: runtimePortMissing\n\t\t\t\t\t\t\t\t? form.sourceType === 'registry'\n\t\t\t\t\t\t\t\t\t? 'Container port is required for registry images. Set it in Advanced runtime settings.'\n\t\t\t\t\t\t\t\t\t: 'Application port has not been detected. Run Detect runtime or set an Advanced override.'\n\t\t\t\t\t\t\t\t: composeDisabledReason",
+          )
+          replace_once(
+              "\t\t\t\t? form.branch.trim()\n\t\t\t\t\t? 'Run detection to fill runtime, port, service, and discovered environment defaults.'",
+              "\t\t\t\t? form.branch.trim()\n\t\t\t\t\t? 'Run detection to fill runtime, container port, service, and discovered environment defaults.'",
+          )
+          replace_once(
+              "\t\t\tif (!form.appPort) form.appPort = DEFAULT_APP_PORT;\n\t\t\tappPortSource = 'fallback';",
+              "\t\t\tform.appPort = '';\n\t\t\tappPortSource = 'unresolved';",
+          )
+          replace_once(
+              "\t\t\tif (form.appPort === DEFAULT_APP_PORT) form.appPort = '';\n\t\t\tappPortSource = 'fallback';",
+              "\t\t\tform.appPort = '';\n\t\t\tappPortSource = 'unresolved';",
+          )
+          replace_once(
+              "\t\t} else if (form.appPort === '80') {\n\t\t\tform.appPort = '';\n\t\t\tappPortSource = 'fallback';\n\t\t} else if (!form.appPort) {\n\t\t\tappPortSource = 'fallback';",
+              "\t\t} else if (appPortSource === 'static') {\n\t\t\tform.appPort = '';\n\t\t\tappPortSource = 'unresolved';\n\t\t} else if (!form.appPort) {\n\t\t\tappPortSource = 'unresolved';",
+          )
+          replace_once(
+              "\t\t\tform.appPort = '';\n\t\t\tappPortSource = 'fallback';\n\t\t}\n\t\tdetectedServices = detected.services ?? [];",
+              "\t\t\tform.appPort = '';\n\t\t\tappPortSource = 'unresolved';\n\t\t}\n\t\tdetectedServices = detected.services ?? [];",
+          )
+          replace_once(
+              "\t\tappPortSource = form.appPort ? 'manual' : 'fallback';",
+              "\t\tappPortSource = form.appPort ? 'manual' : 'unresolved';",
+          )
+          replace_once(
+              "\t\tconst portRequirement = '- MyPaas automatically routes traffic to port 80 inside the container. Configure the application to listen on 0.0.0.0:80. Do not use or ask for a PORT environment variable.';\n\t\tconst envRequirement = envKeys.length > 0\n\t\t\t? `- Preserve and document these environment keys already discovered by MyPaas: ${envKeys.join(', ')}. Remove any PORT or APP_PORT keys since the app must listen on port 80. Do not put secret values in Git.`\n\t\t\t: '- Discover the runtime environment keys the application needs. Add keys only to .env.example with safe placeholders. Do not add PORT or APP_PORT keys since the app must listen on port 80. Never put secret values in Git.';",
+              "\t\tconst portContext = portSource === 'detected'\n\t\t\t? 'detected by MyPaas'\n\t\t\t: portSource === 'manual'\n\t\t\t\t? 'set as an Advanced override'\n\t\t\t\t: 'not resolved yet';\n\t\tconst portRequirement = appPort.trim()\n\t\t\t? `- The container port is ${appPort.trim()} (${portContext}). Keep the application listening on 0.0.0.0:${appPort.trim()} and declare/expose that container port. MyPaas manages the host port and Caddy route automatically.`\n\t\t\t: '- Make the HTTP application listen on one explicit container port, bind it to 0.0.0.0, and declare that port with Dockerfile EXPOSE or Compose expose/ports so MyPaas can detect it. Do not choose a host port; MyPaas manages host allocation and Caddy routing.';\n\t\tconst envRequirement = envKeys.length > 0\n\t\t\t? `- Preserve and document these environment keys already discovered by MyPaas: ${envKeys.join(', ')}. PORT or APP_PORT are valid when the application uses them to select its container listening port. Do not put secret values in Git.`\n\t\t\t: '- Discover the runtime environment keys the application needs. Add keys only to .env.example with safe placeholders. PORT or APP_PORT are valid when required by the application. Never put secret values in Git.';",
+          )
+          replace_once(
+              "\t\t\tconst appPort = deployMode === 'static' ? 80 : Number(form.appPort || DEFAULT_APP_PORT);",
+              "\t\t\tconst appPort = resolveProjectAppPort(deployMode, form.appPort);",
+          )
+          replace_once(
+              "\t\t\t\t\t\t<p class=\"mt-0.5 text-xs leading-5 text-brand-800 dark:text-brand-200\">Runtime mode is fixed for registry sources. Set the port the image listens on; MyPaas handles host allocation and routing.</p>",
+              "\t\t\t\t\t\t<p class=\"mt-0.5 text-xs leading-5 text-brand-800 dark:text-brand-200\">Runtime mode is fixed for registry sources. Repository-based port detection is unavailable for pre-built images in this MVP, so set the container port in Advanced runtime settings. MyPaas still manages host allocation and Caddy routing.</p>",
+          )
+
+          old_runtime_block = '''\t\t\t\t<div class="grid gap-4 sm:grid-cols-2">
+\t\t\t\t\t{#if form.deployMode === 'compose'}
+\t\t\t\t\t\t<div>
+\t\t\t\t\t\t\t<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="mainService">Main service</label>
+\t\t\t\t\t\t\t<input id="mainService" type="text" bind:value={form.mainService} placeholder="app" class="field w-full font-mono" />
+\t\t\t\t\t\t</div>
+\t\t\t\t\t{/if}
+\t\t\t\t\t{#if form.deployMode !== 'static'}
+\t\t\t\t\t\t<div>
+\t\t\t\t\t\t\t<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="appPort">App port</label>
+\t\t\t\t\t\t\t<input
+\t\t\t\t\t\t\t\tid="appPort"
+\t\t\t\t\t\t\t\ttype="number"
+\t\t\t\t\t\t\t\tmin="1"
+\t\t\t\t\t\t\t\tmax="65535"
+\t\t\t\t\t\t\t\tvalue={form.appPort}
+\t\t\t\t\t\t\t\tplaceholder={DEFAULT_APP_PORT}
+\t\t\t\t\t\t\t\ton:input={handleAppPortInput}
+\t\t\t\t\t\t\t\tclass="field w-full font-mono"
+\t\t\t\t\t\t\t/>
+\t\t\t\t\t\t\t<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{portStateLabel}</p>
+\t\t\t\t\t\t</div>
+\t\t\t\t\t{:else}
+\t\t\t\t\t\t<div class="soft-panel p-3 text-sm sm:col-span-2">
+\t\t\t\t\t\t\t<p class="font-medium text-gray-950 dark:text-white">Static deployment</p>
+\t\t\t\t\t\t\t<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Static projects are served by the file server on port 80, so app port and database options are disabled.</p>
+\t\t\t\t\t\t</div>
+\t\t\t\t\t{/if}
+\t\t\t\t</div>'''
+          new_runtime_block = '''\t\t\t\t<div class="grid gap-4 sm:grid-cols-2">
+\t\t\t\t\t{#if form.deployMode === 'compose'}
+\t\t\t\t\t\t<div>
+\t\t\t\t\t\t\t<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="mainService">Main service</label>
+\t\t\t\t\t\t\t<input id="mainService" type="text" bind:value={form.mainService} placeholder="app" class="field w-full font-mono" />
+\t\t\t\t\t\t</div>
+\t\t\t\t\t{/if}
+\t\t\t\t\t{#if form.deployMode !== 'static'}
+\t\t\t\t\t\t<div class="soft-panel p-3 text-sm {form.deployMode === 'compose' ? '' : 'sm:col-span-2'}">
+\t\t\t\t\t\t\t<p class="font-medium text-gray-950 dark:text-white">Container port</p>
+\t\t\t\t\t\t\t{#if form.appPort}
+\t\t\t\t\t\t\t\t<p class="mt-1 font-mono text-sm text-gray-950 dark:text-white">{form.appPort}</p>
+\t\t\t\t\t\t\t\t<p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{portStateLabel}. Public traffic still enters through Caddy; this is only the application's internal listening port.</p>
+\t\t\t\t\t\t\t{:else}
+\t\t\t\t\t\t\t\t<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Not detected yet. MyPaas reads Dockerfile/Compose metadata during runtime detection instead of assuming port 80.</p>
+\t\t\t\t\t\t\t{/if}
+\t\t\t\t\t\t</div>
+\t\t\t\t\t{:else}
+\t\t\t\t\t\t<div class="soft-panel p-3 text-sm sm:col-span-2">
+\t\t\t\t\t\t\t<p class="font-medium text-gray-950 dark:text-white">Static deployment</p>
+\t\t\t\t\t\t\t<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Static projects are served directly by Caddy, so no application port or database runtime is required.</p>
+\t\t\t\t\t\t</div>
+\t\t\t\t\t{/if}
+\t\t\t\t</div>
+
+\t\t\t\t{#if form.deployMode !== 'static'}
+\t\t\t\t\t<details class="rounded-md border border-gray-200 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-950/40" open={form.sourceType === 'registry' && !form.appPort}>
+\t\t\t\t\t\t<summary class="cursor-pointer text-sm font-medium text-gray-950 dark:text-white">Advanced runtime settings</summary>
+\t\t\t\t\t\t<div class="mt-3 max-w-sm">
+\t\t\t\t\t\t\t<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="appPort">Container port override</label>
+\t\t\t\t\t\t\t<input
+\t\t\t\t\t\t\t\tid="appPort"
+\t\t\t\t\t\t\t\ttype="number"
+\t\t\t\t\t\t\t\tmin="1"
+\t\t\t\t\t\t\t\tmax="65535"
+\t\t\t\t\t\t\t\tvalue={form.appPort}
+\t\t\t\t\t\t\t\tplaceholder="e.g. 3000"
+\t\t\t\t\t\t\t\ton:input={handleAppPortInput}
+\t\t\t\t\t\t\t\tclass="field w-full font-mono"
+\t\t\t\t\t\t\t/>
+\t\t\t\t\t\t\t<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Normally leave this alone. Use it only when repository detection cannot determine the port, or for a pre-built registry image. This is the container port, not Caddy's public port.</p>
+\t\t\t\t\t\t</div>
+\t\t\t\t\t</details>
+\t\t\t\t{/if}'''
+          replace_once(old_runtime_block, new_runtime_block)
+          replace_once(
+              "\t\t\t\t\t\t\t<dt class=\"text-xs text-gray-500 dark:text-gray-400\">Port</dt>",
+              "\t\t\t\t\t\t\t<dt class=\"text-xs text-gray-500 dark:text-gray-400\">Container port</dt>",
+          )
+
+          if 'DEFAULT_APP_PORT' in text:
+              raise SystemExit('DEFAULT_APP_PORT fallback still present')
+          if 'Fallback if detection finds no port' in text:
+              raise SystemExit('fallback copy still present')
+          if 'automatically routes traffic to port 80 inside the container' in text:
+              raise SystemExit('incorrect port-80 handoff copy still present')
+
+          path.write_text(text)
+          PY
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          rm .github/workflows/apply-auto-port-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/src/routes/projects/new/+page.svelte .github/workflows/apply-auto-port-patch.yml
+          git commit -m "refactor: make app port detection-first [port-patch-done]"
+          git push origin HEAD:contrib/auto-detect-app-port
