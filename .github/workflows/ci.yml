@@ -55,3 +55,15 @@ jobs:
         run: pnpm check
       - name: Production build
         run: pnpm build
+
+  scripts:
+    name: Deployment script checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bash syntax
+        run: bash -n scripts/*.sh
+      - name: Bootstrap regression tests
+        run: python3 -m unittest scripts/bootstrap_test.py
+      - name: Production Compose config
+        run: docker compose -f docker-compose.prod.yml --env-file .env.example config >/dev/null

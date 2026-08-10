@@ -249,6 +249,28 @@ INSTALL_WIZARD=true bash scripts/install-vm.sh       # use browser wizard for cr
 WIZARD_PUBLIC_TUNNEL=false INSTALL_WIZARD=true bash scripts/install-vm.sh  # require SSH forwarding instead
 ```
 
+### Automatic self-updates
+
+Automatic updates are intentionally opt-in. Enable the systemd timer on an installed VM with:
+
+```bash
+cd ~/MyPaas
+AUTO_UPDATE_ENABLED=true AUTO_UPDATE_INTERVAL_MINUTES=30 bash scripts/configure-auto-update.sh
+```
+
+The updater checks the configured Git ref, waits until API and dashboard images tagged with the exact target commit SHA are available, then updates the managed checkout and deploys that same image revision. Dirty checkouts are refused. Rewritten/squashed upstream history is supported because installer-managed checkouts synchronize with `git reset --hard` only after confirming there are no local changes.
+
+Useful operations:
+
+```bash
+bash scripts/update-vm.sh   # run one update check now
+systemctl status mypaas-update.timer  # timer state / next run
+journalctl -u mypaas-update.service   # updater logs
+AUTO_UPDATE_ENABLED=false bash scripts/configure-auto-update.sh  # disable
+```
+
+`AUTO_UPDATE_REF` defaults to `main`; `AUTO_UPDATE_INTERVAL_MINUTES` defaults to `30` and must be between 5 minutes and 7 days. Automatic runtime rollback is best effort because forward database migrations may not themselves be reversible, so production backups should remain enabled. See [ADR-018](docs/adr/ADR-018-automatic-self-update.md).
+
 **Production checklist:**
 - [ ] All tests passing
 - [ ] Environment variables set

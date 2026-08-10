@@ -33,10 +33,13 @@ usage() {
     'MyPaas bootstrap installer' \
     '' \
     'Environment overrides:' \
-    '  MYPAAS_REPO_URL       Git repository URL' \
-    '  MYPAAS_REF            Branch or tag to install (default: main)' \
-    '  MYPAAS_INSTALL_DIR    Checkout directory (default: $HOME/MyPaas)' \
-    '  INSTALL_WIZARD        Start browser setup wizard (default: true)' \
+    '  MYPAAS_REPO_URL               Git repository URL' \
+    '  MYPAAS_REF                    Branch or tag to install (default: main)' \
+    '  MYPAAS_INSTALL_DIR            Checkout directory (default: $HOME/MyPaas)' \
+    '  INSTALL_WIZARD                Start browser setup wizard (default: true)' \
+    '  AUTO_UPDATE_ENABLED           Enable systemd self-updates (default: false)' \
+    '  AUTO_UPDATE_INTERVAL_MINUTES  Update check interval (default: 30)' \
+    '  AUTO_UPDATE_REF               Ref watched by the updater (default: main)' \
     '' \
     'All install-vm.sh environment flags are forwarded to the installer.'
 }
@@ -62,7 +65,10 @@ checkout_repo() {
     [[ "$(git -C "$INSTALL_DIR" remote get-url origin)" == "$REPO_URL" ]] || die "$INSTALL_DIR points to a different Git origin"
     log "Updating existing MyPaas checkout"
     git -C "$INSTALL_DIR" fetch --depth 1 origin "$REF"
-    git -C "$INSTALL_DIR" merge --ff-only FETCH_HEAD
+    # This checkout is installer-managed and local changes were rejected above.
+    # Resetting to FETCH_HEAD is intentional: upstream may rewrite/squash main,
+    # where an ff-only merge can fail with unrelated histories.
+    git -C "$INSTALL_DIR" reset --hard FETCH_HEAD
     return
   fi
 

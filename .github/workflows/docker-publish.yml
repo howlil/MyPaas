@@ -35,7 +35,9 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/nabilrn/mypaas-api:latest
+          tags: |
+            ${{ env.REGISTRY }}/nabilrn/mypaas-api:latest
+            ${{ env.REGISTRY }}/nabilrn/mypaas-api:${{ github.sha }}
 
       - name: Build and push Dashboard image
         uses: docker/build-push-action@v5
@@ -43,4 +45,6 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/nabilrn/mypaas-dashboard:latest
+          tags: |
+            ${{ env.REGISTRY }}/nabilrn/mypaas-dashboard:latest
+            ${{ env.REGISTRY }}/nabilrn/mypaas-dashboard:${{ github.sha }}

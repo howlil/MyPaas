@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Opt-in host-side automatic MyPaas updates with a systemd timer, revision-pinned GHCR artifacts, health verification, best-effort runtime rollback, and force-push-safe bootstrap checkout synchronization. See ADR-018.
 - Public container registry deployment source for pre-built OCI images (Docker Hub, GHCR, and compatible public registries), including source-aware project UI, image pull/digest tracking, normal env/resource/Caddy runtime controls, and rollback by recorded image reference. See ADR-017.
 - Cloudflare Analytics integration in Project Metrics with global setup form, GraphQL API backend, and automatic subdomain-level filtering (Total Requests, Bandwidth, Edge Errors).
 - Microservice env support: per-service `.env.example` templates are auto-discovered in subdirectories. At deploy time, MyPaas generates a `.env` file next to each template by substituting the user's env var values. Existing `.env` files are never overwritten. Build log shows "Generated apps/api/.env from .env.example" for each file.

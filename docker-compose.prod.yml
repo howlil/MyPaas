@@ -18,7 +18,7 @@ services:
       retries: 5
 
   api:
-    image: ghcr.io/nabilrn/mypaas-api:latest
+    image: ghcr.io/nabilrn/mypaas-api:${MYPAAS_IMAGE_TAG:-latest}
     container_name: mypaas-api
     restart: always
     environment:
@@ -69,7 +69,7 @@ services:
         condition: service_healthy
 
   dashboard:
-    image: ghcr.io/nabilrn/mypaas-dashboard:latest
+    image: ghcr.io/nabilrn/mypaas-dashboard:${MYPAAS_IMAGE_TAG:-latest}
     container_name: mypaas-dashboard
     restart: always
     ports:
