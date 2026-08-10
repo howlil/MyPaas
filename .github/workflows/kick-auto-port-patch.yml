@@ -21,13 +21,13 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          from textwrap import dedent
 
           workflow = Path('.github/workflows/apply-auto-port-patch.yml').read_text()
           marker = "          python3 - <<'PY'\n"
           start = workflow.index(marker) + len(marker)
           end = workflow.index("          PY\n      - name: Commit patch", start)
-          script = dedent(workflow[start:end])
+          lines = workflow[start:end].splitlines()
+          script = "\n".join(line[10:] if line.startswith("          ") else line for line in lines)
           exec(compile(script, 'apply-auto-port-patch', 'exec'))
           PY
       - name: Commit patched UX
