@@ -177,6 +177,7 @@ CADDY_UPSTREAM_HOST={clean["DOCKER_BIND_HOST"]}
 STATIC_ROOT=/var/lib/mypaas/static
 CADDY_STATIC_ROOT=/var/lib/mypaas/static
 CADDY_METRICS=true
+STATD_SOCKET=/run/mypaas/statd.sock
 """
 
 
@@ -851,4 +852,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -43,6 +43,27 @@ class InstallConfigTest(unittest.TestCase):
         self.assertIn("! command_exists catatonit", installer)
         self.assertIn("podman catatonit docker-ce-cli", installer)
 
+    def test_installer_installs_statd_host_daemon_by_default(self) -> None:
+        installer = (ROOT_DIR / "scripts" / "install-vm.sh").read_text(encoding="utf-8")
+
+        self.assertIn('INSTALL_STATD="${INSTALL_STATD:-true}"', installer)
+        self.assertIn("https://github.com/nabilrn/mypaas-statd.git", installer)
+        self.assertIn("systemctl enable --now mypaas-statd", installer)
+        self.assertIn("STATD_SOCKET=/run/mypaas/statd.sock", installer)
+
+        values = dict(WIZARD.DEFAULTS)
+        values.update(
+            {
+                "PUBLIC_DOMAIN": "mypaas.example.com",
+                "OWNER_EMAIL": "owner@example.com",
+                "GITHUB_CLIENT_ID": "client-id",
+                "GITHUB_CLIENT_SECRET": "client-secret",
+                "CLOUDFLARE_TUNNEL_TOKEN": "tunnel-token",
+            }
+        )
+        content = WIZARD.build_env(values)
+        self.assertIn("STATD_SOCKET=/run/mypaas/statd.sock", content)
+
     def test_production_compose_avoids_nested_env_expansion(self) -> None:
         compose = (ROOT_DIR / "docker-compose.prod.yml").read_text(encoding="utf-8")
 

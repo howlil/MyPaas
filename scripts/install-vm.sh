@@ -24,6 +24,10 @@ WIZARD_PUBLIC_TUNNEL="${WIZARD_PUBLIC_TUNNEL:-true}"
 
 USE_PODMAN="${USE_PODMAN:-false}"
 MIGRATE_URL="${MIGRATE_URL:-}"
+INSTALL_STATD="${INSTALL_STATD:-true}"
+STATD_REPO_URL="${STATD_REPO_URL:-https://github.com/nabilrn/mypaas-statd.git}"
+STATD_REF="${STATD_REF:-main}"
+STATD_DIR="${STATD_DIR:-/opt/mypaas-statd}"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -242,6 +246,40 @@ ensure_dependencies() {
   fi
 }
 
+install_statd() {
+  if [[ "$INSTALL_STATD" != "true" ]]; then
+    log "Skipping mypaas-statd install because INSTALL_STATD=false"
+    return
+  fi
+
+  command_exists systemctl || die "mypaas-statd install requires systemd. Set INSTALL_STATD=false to skip."
+  [[ -f /sys/fs/cgroup/cgroup.controllers ]] || die "mypaas-statd requires cgroup v2. Set INSTALL_STATD=false to skip."
+
+  if command_exists apt-get; then
+    sudo_cmd apt-get update
+    sudo_cmd apt-get install -y git make gcc libc6-dev
+  else
+    command_exists git || die "git is required to install mypaas-statd"
+    command_exists make || die "make is required to install mypaas-statd"
+    command_exists cc || command_exists gcc || die "a C compiler is required to install mypaas-statd"
+  fi
+
+  log "Installing mypaas-statd from $STATD_REPO_URL ($STATD_REF)"
+  if [[ -d "$STATD_DIR/.git" ]]; then
+    sudo_cmd git -C "$STATD_DIR" fetch --prune origin
+  elif [[ -e "$STATD_DIR" ]]; then
+    die "$STATD_DIR exists but is not a git checkout"
+  else
+    sudo_cmd git clone "$STATD_REPO_URL" "$STATD_DIR"
+  fi
+
+  sudo_cmd git -C "$STATD_DIR" checkout "$STATD_REF"
+  sudo_cmd git -C "$STATD_DIR" pull --ff-only origin "$STATD_REF" || true
+  sudo_cmd make -C "$STATD_DIR" install PREFIX=/usr/local SYSTEMD_UNIT_DIR=/etc/systemd/system
+  sudo_cmd systemctl daemon-reload
+  sudo_cmd systemctl enable --now mypaas-statd
+}
+
 docker_prefix() {
   if docker ps >/dev/null 2>&1; then
     printf 'docker'
@@ -409,6 +447,7 @@ CADDY_UPSTREAM_HOST=$docker_bind_host
 STATIC_ROOT=/var/lib/mypaas/static
 CADDY_STATIC_ROOT=/var/lib/mypaas/static
 CADDY_METRICS=true
+STATD_SOCKET=/run/mypaas/statd.sock
 EOF
 }
 
@@ -429,6 +468,7 @@ prepare_host() {
   source "$ENV_FILE"
   set +a
   ensure_docker_network "${PROJECT_NETWORK:-mypaas-prod}"
+  install_statd
 }
 
 main() {
