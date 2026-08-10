@@ -163,7 +163,7 @@
 	$: sourceReady = form.sourceType === 'registry'
 		? Boolean(form.imageRef.trim())
 		: Boolean(form.repoUrl.trim() && form.branch.trim() && repositoryInspectionCurrent);
-	$: currentRepoInspectKey = repositoryInspectionKey();
+	$: currentRepoInspectKey = [form.repoUrl.trim(), form.branch.trim(), form.baseDirectory.trim()].join('\n');
 	$: repositoryInspectionCurrent = Boolean(
 		form.repoUrl.trim()
 		&& form.branch.trim()
