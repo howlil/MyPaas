@@ -789,19 +789,16 @@ func parseComposeBuildServicesJSON(raw []byte) ([]string, error) {
 	return services, nil
 }
 
-// sanitizeComposeConfig strips fields MyPaas overrides at runtime so the
-// sanitized JSON can be passed to `docker compose up` without colliding with
-// MyPaas' own generated override. Currently strips:
-//   - services[*].ports — MyPaas rewrites host port bindings via the override
-//     file so user-published ports never clash with Caddy or other projects.
-//   - services[*].container_name — two MyPaas projects both declaring
-//     `container_name: mysql` would collide on the host. Docker Compose
-//     generates safe project-scoped names (e.g. `mypaas-myapp-mysql-1`) when
-//     container_name is absent, so stripping is the safest fix.
+// sanitizeComposeConfig first enforces MyPaas' host-isolation policy on the
+// exact rendered config, then strips fields MyPaas overrides at runtime. The
+// resulting JSON is the only user Compose config passed to `docker compose up`.
 func sanitizeComposeConfig(raw []byte) ([]byte, error) {
 	var doc map[string]any
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return nil, fmt.Errorf("parse compose config json: %w", err)
+	}
+	if err := validateComposeSecurity(doc); err != nil {
+		return nil, err
 	}
 
 	services, ok := doc["services"].(map[string]any)

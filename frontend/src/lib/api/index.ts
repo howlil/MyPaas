@@ -1,3 +1,4 @@
+import { validateProjectCreateInput, validateProjectUpdateInput } from '$lib/validation/project';
 import type {
 	Project,
 	Deployment,
@@ -90,13 +91,19 @@ export const api = {
 	projects: {
 		list:   ():                    Promise<Project[]>  => request('/projects'),
 		get:    (id: string):          Promise<Project>    => request(`/projects/${id}`),
-		create: (data: unknown):       Promise<Project>    => request('/projects',      { method: 'POST',   body: JSON.stringify(data) }),
+		create: (data: unknown): Promise<Project> => {
+			validateProjectCreateInput(data);
+			return request('/projects', { method: 'POST', body: JSON.stringify(data) });
+		},
 		detectMode: (data: unknown):   Promise<DeployModeDetection> => request('/projects/detect-mode', { method: 'POST', body: JSON.stringify(data) }),
 		detectCompose: (data: unknown): Promise<ComposeFileDetection> =>
 			request('/projects/detect-compose', { method: 'POST', body: JSON.stringify(data) }),
 		inspectRepository: (data: unknown): Promise<RepoInspection> =>
 			request('/projects/detect-mode', { method: 'POST', body: JSON.stringify({ ...(data as object), inspectOnly: true }) }),
-		update: (id: string, d: unknown): Promise<Project> => request(`/projects/${id}`, { method: 'PATCH',  body: JSON.stringify(d) }),
+		update: (id: string, data: unknown): Promise<Project> => {
+			validateProjectUpdateInput(data);
+			return request(`/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+		},
 		delete: (id: string):          Promise<void>       => request(`/projects/${id}`, { method: 'DELETE' }),
 		deploy: (id: string):          Promise<Deployment> => request(`/projects/${id}/deploy`,   { method: 'POST' }),
 		start:  (id: string):          Promise<void>       => request(`/projects/${id}/start`,    { method: 'POST' }),

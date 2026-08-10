@@ -469,52 +469,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, er
 	input.ResourceProfile = profileID
 	input.MemoryLimitMb = memoryLimitMb
 	input.CPULimit = cpuLimit
-	if s.quota != nil {
-		if err := s.quota.CheckCreate(ctx, input.UserID, input.MemoryLimitMb, input.CPULimit); err != nil {
-			return db.Project{}, err
-		}
-	}
-
-	if _, err := s.queries.GetProjectByName(ctx, name); err == nil {
-		return db.Project{}, errs.ErrProjectNameTaken
-	} else if err != pgx.ErrNoRows {
-		return db.Project{}, err
-	}
-
 	secret, err := randomSecret()
 	if err != nil {
 		return db.Project{}, fmt.Errorf("generate webhook secret: %w", err)
 	}
 
-	project, err := s.queries.CreateProject(ctx, db.CreateProjectParams{
-		UserID:               input.UserID,
-		Name:                 name,
-		RepoUrl:              strings.TrimSpace(input.RepoURL),
-		Branch:               strings.TrimSpace(input.Branch),
-		Subdomain:            name,
-		DeployMode:           input.DeployMode,
-		ResourceProfile:      input.ResourceProfile,
-		MainService:          input.MainService,
-		AppPort:              input.AppPort,
-		WebhookSecret:        secret,
-		MemoryLimitMb:        input.MemoryLimitMb,
-		CpuLimit:             numericFromFloat(input.CPULimit),
-		ComposeFilePath:      input.ComposeFilePath,
-		ComposeOverridePaths: normalizeStringSlice(input.ComposeOverridePaths),
-		ComposeProfiles:      normalizeStringSlice(input.ComposeProfiles),
-		ComposeWorkdir:       input.ComposeWorkdir,
-		ServiceResources:     input.ServiceResources,
-		StaticFrontendPath:   input.StaticFrontendPath,
-		BaseDirectory:        input.BaseDirectory,
-		ImageRef:             input.ImageRef,
-	})
-	if err != nil {
-		if isProjectUniqueViolation(err) {
-			return db.Project{}, errs.ErrProjectNameTaken
-		}
-		return db.Project{}, err
-	}
-	return project, nil
+	return s.createProjectRecord(ctx, input, name, secret)
 }
 
 func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, error) {
@@ -625,13 +585,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 	input.ResourceProfile = profileID
 	input.MemoryLimitMb = memoryLimitMb
 	input.CPULimit = cpuLimit
-	if s.quota != nil {
-		if err := s.quota.CheckUpdate(ctx, existing, input.MemoryLimitMb, input.CPULimit); err != nil {
-			return db.Project{}, err
-		}
-	}
-
-	if err := s.queries.UpdateProject(ctx, db.UpdateProjectParams{
+	params := db.UpdateProjectParams{
 		ID:                   input.ID,
 		Name:                 name,
 		Subdomain:            name,
@@ -649,14 +603,9 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 		StaticFrontendPath:   input.StaticFrontendPath,
 		BaseDirectory:        input.BaseDirectory,
 		ImageRef:             imageRef,
-	}); err != nil {
-		if isProjectUniqueViolation(err) {
-			return db.Project{}, errs.ErrProjectNameTaken
-		}
-		return db.Project{}, err
 	}
 
-	return s.Get(ctx, input.ID)
+	return s.updateProjectRecord(ctx, existing, input, params)
 }
 
 func (s *Service) Delete(ctx context.Context, id uuid.UUID) error {

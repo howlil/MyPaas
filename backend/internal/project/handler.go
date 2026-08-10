@@ -15,6 +15,7 @@ import (
 	"mypaas/internal/envvar"
 	"mypaas/internal/errs"
 	"mypaas/internal/httpx"
+	"mypaas/internal/repopath"
 )
 
 type Handler struct {
@@ -97,29 +98,45 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
 		return
 	}
+	if req.BaseDirectory != nil {
+		if err := repopath.Validate(*req.BaseDirectory); err != nil {
+			httpx.DomainError(w, err)
+			return
+		}
+	}
+	if req.StaticFrontendPath != nil {
+		if err := repopath.Validate(*req.StaticFrontendPath); err != nil {
+			httpx.DomainError(w, err)
+			return
+		}
+	}
 	if req.MemoryLimitMb == 0 {
 		req.MemoryLimitMb = req.MemoryMb
 	}
 
-	project, err := h.service.Create(r.Context(), CreateInput{
-		UserID:               user.ID,
-		Name:                 req.Name,
-		SourceType:           req.SourceType,
-		RepoURL:              req.RepoURL,
-		ImageRef:             req.ImageRef,
-		Branch:               req.Branch,
-		DeployMode:           req.DeployMode,
-		ResourceProfile:      req.ResourceProfile,
-		MainService:          req.MainService,
-		AppPort:              req.AppPort,
-		MemoryLimitMb:        req.MemoryLimitMb,
-		CPULimit:             req.CPULimit,
-		ComposeFilePath:      req.ComposeFilePath,
-		ComposeOverridePaths: req.ComposeOverridePaths,
-		ComposeProfiles:      req.ComposeProfiles,
-		ComposeWorkdir:       req.ComposeWorkdir,
-		StaticFrontendPath:   req.StaticFrontendPath,
-		BaseDirectory:        req.BaseDirectory,
+	project, err := h.service.CreateValidated(r.Context(), CreateValidationInput{
+		Project: CreateInput{
+			UserID:               user.ID,
+			Name:                 req.Name,
+			SourceType:           req.SourceType,
+			RepoURL:              req.RepoURL,
+			ImageRef:             req.ImageRef,
+			Branch:               req.Branch,
+			DeployMode:           req.DeployMode,
+			ResourceProfile:      req.ResourceProfile,
+			MainService:          req.MainService,
+			AppPort:              req.AppPort,
+			MemoryLimitMb:        req.MemoryLimitMb,
+			CPULimit:             req.CPULimit,
+			ComposeFilePath:      req.ComposeFilePath,
+			ComposeOverridePaths: req.ComposeOverridePaths,
+			ComposeProfiles:      req.ComposeProfiles,
+			ComposeWorkdir:       req.ComposeWorkdir,
+			StaticFrontendPath:   req.StaticFrontendPath,
+			BaseDirectory:        req.BaseDirectory,
+		},
+		EnvVars:        req.EnvVars,
+		SharedPostgres: req.SharedPostgres,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
@@ -164,19 +181,21 @@ func (h *Handler) cleanupCreatedProject(r *http.Request, id uuid.UUID) {
 
 func (h *Handler) DetectMode(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RepoURL     string `json:"repoUrl"`
-		Branch      string `json:"branch"`
-		InspectOnly bool   `json:"inspectOnly"`
+		RepoURL       string `json:"repoUrl"`
+		Branch        string `json:"branch"`
+		InspectOnly   bool   `json:"inspectOnly"`
+		BaseDirectory string `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
 		return
 	}
 
-	result, err := h.service.DetectMode(r.Context(), DetectInput{
-		RepoURL:     req.RepoURL,
-		Branch:      req.Branch,
-		InspectOnly: req.InspectOnly,
+	result, err := h.service.DetectModeValidated(r.Context(), DetectInput{
+		RepoURL:       req.RepoURL,
+		Branch:        req.Branch,
+		InspectOnly:   req.InspectOnly,
+		BaseDirectory: req.BaseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
@@ -187,8 +206,9 @@ func (h *Handler) DetectMode(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DetectCompose(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RepoURL string `json:"repoUrl"`
-		Branch  string `json:"branch"`
+		RepoURL       string `json:"repoUrl"`
+		Branch        string `json:"branch"`
+		BaseDirectory string `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
@@ -196,8 +216,9 @@ func (h *Handler) DetectCompose(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.service.DetectCompose(r.Context(), DetectComposeInput{
-		RepoURL: req.RepoURL,
-		Branch:  req.Branch,
+		RepoURL:       req.RepoURL,
+		Branch:        req.Branch,
+		BaseDirectory: req.BaseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
@@ -232,18 +253,32 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		ComposeProfiles      []string        `json:"composeProfiles"`
 		ComposeWorkdir       *string         `json:"composeWorkdir"`
 		ServiceResources     json.RawMessage `json:"serviceResources"`
-		StaticFrontendPath   *string         `json:"staticFrontendPath"`
-		BaseDirectory        *string         `json:"baseDirectory"`
+		StaticFrontendPath   optionalString  `json:"staticFrontendPath"`
+		BaseDirectory        optionalString  `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
 		return
 	}
+	if req.BaseDirectory.Set && req.BaseDirectory.Value != nil {
+		if err := repopath.Validate(*req.BaseDirectory.Value); err != nil {
+			httpx.DomainError(w, err)
+			return
+		}
+	}
+	if req.StaticFrontendPath.Set && req.StaticFrontendPath.Value != nil {
+		if err := repopath.Validate(*req.StaticFrontendPath.Value); err != nil {
+			httpx.DomainError(w, err)
+			return
+		}
+	}
 	if req.MemoryLimitMb == 0 {
 		req.MemoryLimitMb = req.MemoryMb
 	}
+	staticFrontendPath := req.StaticFrontendPath.Resolve(before.StaticFrontendPath)
+	baseDirectory := req.BaseDirectory.Resolve(before.BaseDirectory)
 
-	project, err := h.service.Update(r.Context(), UpdateInput{
+	project, err := h.service.UpdateValidated(r.Context(), UpdateInput{
 		ID:                   id,
 		Name:                 req.Name,
 		Branch:               req.Branch,
@@ -258,8 +293,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		ComposeProfiles:      req.ComposeProfiles,
 		ComposeWorkdir:       req.ComposeWorkdir,
 		ServiceResources:     req.ServiceResources,
-		StaticFrontendPath:   req.StaticFrontendPath,
-		BaseDirectory:        req.BaseDirectory,
+		StaticFrontendPath:   staticFrontendPath,
+		BaseDirectory:        baseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
