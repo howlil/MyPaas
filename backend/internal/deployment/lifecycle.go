@@ -44,7 +44,7 @@ func (s *Service) ReconcileMissingRuntimes(ctx context.Context) error {
 }
 
 func projectHasContainerRuntime(project db.Project) bool {
-	return project.DeployMode == "dockerfile" || project.DeployMode == "compose"
+	return project.DeployMode == "dockerfile" || project.DeployMode == "compose" || project.DeployMode == "image"
 }
 
 func runtimeStackName(project db.Project) string {

@@ -74,7 +74,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		Name                 string         `json:"name"`
+		SourceType           string         `json:"sourceType"`
 		RepoURL              string         `json:"repoUrl"`
+		ImageRef             *string        `json:"imageRef"`
 		Branch               string         `json:"branch"`
 		DeployMode           string         `json:"deployMode"`
 		ResourceProfile      string         `json:"resourceProfile"`
@@ -116,7 +118,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Project: CreateInput{
 			UserID:               user.ID,
 			Name:                 req.Name,
+			SourceType:           req.SourceType,
 			RepoURL:              req.RepoURL,
+			ImageRef:             req.ImageRef,
 			Branch:               req.Branch,
 			DeployMode:           req.DeployMode,
 			ResourceProfile:      req.ResourceProfile,
@@ -237,6 +241,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name                 string          `json:"name"`
 		Branch               string          `json:"branch"`
+		ImageRef             *string         `json:"imageRef"`
 		ResourceProfile      string          `json:"resourceProfile"`
 		MainService          *string         `json:"mainService"`
 		AppPort              int32           `json:"appPort"`
@@ -255,14 +260,14 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
 		return
 	}
-	if req.BaseDirectory != nil {
-		if err := repopath.Validate(*req.BaseDirectory); err != nil {
+	if req.BaseDirectory.Set && req.BaseDirectory.Value != nil {
+		if err := repopath.Validate(*req.BaseDirectory.Value); err != nil {
 			httpx.DomainError(w, err)
 			return
 		}
 	}
-	if req.StaticFrontendPath != nil {
-		if err := repopath.Validate(*req.StaticFrontendPath); err != nil {
+	if req.StaticFrontendPath.Set && req.StaticFrontendPath.Value != nil {
+		if err := repopath.Validate(*req.StaticFrontendPath.Value); err != nil {
 			httpx.DomainError(w, err)
 			return
 		}
@@ -277,6 +282,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		ID:                   id,
 		Name:                 req.Name,
 		Branch:               req.Branch,
+		ImageRef:             req.ImageRef,
 		ResourceProfile:      req.ResourceProfile,
 		MainService:          req.MainService,
 		AppPort:              req.AppPort,

@@ -51,7 +51,9 @@ type Service struct {
 type CreateInput struct {
 	UserID               uuid.UUID
 	Name                 string
+	SourceType           string
 	RepoURL              string
+	ImageRef             *string
 	Branch               string
 	DeployMode           string
 	ResourceProfile      string
@@ -72,6 +74,7 @@ type UpdateInput struct {
 	ID                   uuid.UUID
 	Name                 string
 	Branch               string
+	ImageRef             *string
 	ResourceProfile      string
 	MainService          *string
 	AppPort              int32
@@ -387,23 +390,55 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (db.Project, er
 	if err := validateName(name); err != nil {
 		return db.Project{}, err
 	}
-	if strings.TrimSpace(input.RepoURL) == "" {
-		return db.Project{}, fmt.Errorf("%w: repository URL is required", errs.ErrValidation)
+
+	sourceType, err := normalizeSourceType(input.SourceType, input.DeployMode)
+	if err != nil {
+		return db.Project{}, err
 	}
-	input.Branch = strings.TrimSpace(input.Branch)
-	if input.Branch == "" {
-		branch, err := resolveDefaultBranch(ctx, input.RepoURL)
+	if sourceType == SourceTypeRegistry {
+		imageRef, err := normalizeImageRef(input.ImageRef)
 		if err != nil {
 			return db.Project{}, err
 		}
-		input.Branch = branch
+		input.ImageRef = imageRef
+		input.RepoURL = ""
+		input.Branch = "main"
+		input.DeployMode = "image"
+		input.MainService = nil
+		input.ComposeFilePath = nil
+		input.ComposeOverridePaths = nil
+		input.ComposeProfiles = nil
+		input.ComposeWorkdir = nil
+		input.StaticFrontendPath = nil
+		input.BaseDirectory = nil
+	} else {
+		input.ImageRef = nil
+		if strings.TrimSpace(input.RepoURL) == "" {
+			return db.Project{}, fmt.Errorf("%w: repository URL is required", errs.ErrValidation)
+		}
+		input.Branch = strings.TrimSpace(input.Branch)
+		if input.Branch == "" {
+			branch, err := resolveDefaultBranch(ctx, input.RepoURL)
+			if err != nil {
+				return db.Project{}, err
+			}
+			input.Branch = branch
+		}
+		if input.DeployMode == "" || input.DeployMode == "auto" {
+			input.DeployMode = "dockerfile"
+		}
 	}
-	if input.DeployMode == "" || input.DeployMode == "auto" {
-		input.DeployMode = "dockerfile"
+
+	if input.DeployMode != "dockerfile" && input.DeployMode != "compose" && input.DeployMode != "static" && input.DeployMode != "image" {
+		return db.Project{}, fmt.Errorf("%w: deploy mode must be dockerfile, compose, static, or image", errs.ErrValidation)
 	}
-	if input.DeployMode != "dockerfile" && input.DeployMode != "compose" && input.DeployMode != "static" {
-		return db.Project{}, fmt.Errorf("%w: deploy mode must be dockerfile, compose, or static", errs.ErrValidation)
+	if sourceType == SourceTypeGit && input.DeployMode == "image" {
+		return db.Project{}, fmt.Errorf("%w: image deploy mode requires registry source", errs.ErrValidation)
 	}
+	if sourceType == SourceTypeRegistry && input.DeployMode != "image" {
+		return db.Project{}, fmt.Errorf("%w: registry source requires image deploy mode", errs.ErrValidation)
+	}
+
 	if input.DeployMode == "compose" {
 		mainService := strings.TrimSpace(valueOrEmpty(input.MainService))
 		if mainService == "" {
@@ -481,6 +516,19 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 		input.ResourceProfile = existing.ResourceProfile
 	}
 
+	imageRef := existing.ImageRef
+	if existing.DeployMode == "image" {
+		if input.ImageRef != nil {
+			normalized, err := normalizeImageRef(input.ImageRef)
+			if err != nil {
+				return db.Project{}, err
+			}
+			imageRef = normalized
+		}
+	} else if input.ImageRef != nil {
+		return db.Project{}, fmt.Errorf("%w: imageRef is only valid for registry projects", errs.ErrValidation)
+	}
+
 	// MainService: only meaningful for compose projects. Allow mutation when
 	// the project is compose-mode; ignore for non-compose projects so the API
 	// stays permissive for callers that always send the field.
@@ -554,6 +602,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (db.Project, er
 		ServiceResources:     serviceResources,
 		StaticFrontendPath:   input.StaticFrontendPath,
 		BaseDirectory:        input.BaseDirectory,
+		ImageRef:             imageRef,
 	}
 
 	return s.updateProjectRecord(ctx, existing, input, params)

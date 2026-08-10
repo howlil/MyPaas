@@ -53,7 +53,7 @@
 	$: normalizedSearch = searchQuery.trim().toLowerCase();
 	$: filteredProjects = normalizedSearch
 		? projects.filter((project) =>
-				[project.name, project.subdomain, project.repoUrl, project.branch, project.deployMode, project.mainService ?? '', project.status].join(' ').toLowerCase().includes(normalizedSearch)
+				[project.name, project.subdomain, project.repoUrl, project.imageRef ?? '', project.sourceType, project.branch, project.deployMode, project.mainService ?? '', project.status].join(' ').toLowerCase().includes(normalizedSearch)
 			)
 		: projects;
 	$: hostRamMb = hostStats ? Math.round(hostStats.host_ram_bytes / (1024 * 1024)) : 0;
@@ -74,6 +74,7 @@
 	$: dockerfileCount = projects.filter((project) => project.deployMode === 'dockerfile').length;
 	$: composeCount = projects.filter((project) => project.deployMode === 'compose').length;
 	$: staticCount = projects.filter((project) => project.deployMode === 'static').length;
+	$: imageCount = projects.filter((project) => project.deployMode === 'image').length;
 	$: latestProject = [...projects].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
 	$: healthyCopy = issueCount > 0 ? `${issueCount} project${issueCount !== 1 ? 's' : ''} need attention` : `${runningCount} running, no crashed projects`;
 	$: syncLabel = error ? 'Sync needs attention' : loading ? 'Syncing workspace' : 'Workspace synced';
@@ -89,7 +90,8 @@
 	$: deployModeSegments = [
 		{ label: 'Dockerfile', value: dockerfileCount, barClass: 'bg-sky-500', textClass: 'text-sky-700 dark:text-sky-300' },
 		{ label: 'Compose', value: composeCount, barClass: 'bg-brand-500', textClass: 'text-brand-700 dark:text-brand-100' },
-		{ label: 'Static', value: staticCount, barClass: 'bg-gray-400 dark:bg-gray-500', textClass: 'text-gray-600 dark:text-gray-300' }
+		{ label: 'Static', value: staticCount, barClass: 'bg-gray-400 dark:bg-gray-500', textClass: 'text-gray-600 dark:text-gray-300' },
+		{ label: 'Image', value: imageCount, barClass: 'bg-amber-500', textClass: 'text-amber-700 dark:text-amber-300' }
 	] satisfies DeployModeSegment[];
 	$: deployModeTotal = deployModeSegments.reduce((sum, segment) => sum + segment.value, 0);
 	$: dominantDeployMode = deployModeSegments.reduce((top, segment) => (segment.value > top.value ? segment : top), deployModeSegments[0]);
@@ -377,7 +379,7 @@
 							</div>
 						</div>
 
-						<div class="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+						<div class="mt-2 grid grid-cols-4 gap-2 text-[11px]">
 							{#each deployModeSegments as segment}
 								<div class="min-w-0">
 									<p class={`truncate font-mono font-semibold ${segment.textClass}`}>{segment.value}</p>
@@ -409,7 +411,7 @@
 		error={error && projects.length === 0 ? error : ''}
 		empty={filteredProjects.length === 0}
 		emptyTitle={normalizedSearch ? 'No projects match this search' : 'No projects yet'}
-		emptyDescription={normalizedSearch ? 'Try a project name, subdomain, branch, deploy mode, or status.' : 'Connect a Git repository and MyPaas will build it from Dockerfile or Compose.'}
+		emptyDescription={normalizedSearch ? 'Try a project name, subdomain, branch, deploy mode, or status.' : 'Connect a Git repository or public container image and MyPaas will prepare the runtime.'}
 		contentClass="overflow-hidden"
 		on:retry={() => refreshDashboardData()}
 	>

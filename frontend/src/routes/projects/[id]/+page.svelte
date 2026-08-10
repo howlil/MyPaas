@@ -44,17 +44,32 @@
 		? `Updated ${new Date(metrics.collectedAt).toLocaleTimeString()}`
 		: 'Waiting for metrics';
 	$: configRows = project
-		? [
-				['Repository', project.repoUrl],
-				['Branch', project.branch],
-				['Deploy mode', project.deployMode],
-				['Main service', project.mainService ?? '-'],
-				['App port', String(project.appPort)],
-				['Allocated port', project.allocatedPort ? String(project.allocatedPort) : 'pending'],
-				['Memory', `${project.memoryLimitMb} MB`],
-				['CPU', `${project.cpuLimit} cores`]
-			]
+		? project.sourceType === 'registry'
+			? [
+					['Source', 'Container Registry'],
+					['Image', project.imageRef ?? '-'],
+					['Deploy mode', project.deployMode],
+					['App port', String(project.appPort)],
+					['Allocated port', project.allocatedPort ? String(project.allocatedPort) : 'pending'],
+					['Memory', `${project.memoryLimitMb} MB`],
+					['CPU', `${project.cpuLimit} cores`]
+				]
+			: [
+					['Source', 'Git Repository'],
+					['Repository', project.repoUrl],
+					['Branch', project.branch],
+					['Deploy mode', project.deployMode],
+					['Main service', project.mainService ?? '-'],
+					['App port', String(project.appPort)],
+					['Allocated port', project.allocatedPort ? String(project.allocatedPort) : 'pending'],
+					['Memory', `${project.memoryLimitMb} MB`],
+					['CPU', `${project.cpuLimit} cores`]
+				]
 		: [];
+	$: lastDeploySourceLabel = project?.sourceType === 'registry' ? 'Image' : 'Commit';
+	$: lastDeploySource = project?.sourceType === 'registry'
+		? (lastDeploy?.imageTag ?? project.imageRef ?? '-')
+		: lastDeployCommit;
 
 	onMount(() => {
 		void loadOverview();
@@ -192,7 +207,7 @@
 		<div class="grid gap-4 lg:grid-cols-2">
 			<SectionPanel
 				title="Configuration"
-				description="Repository, route, runtime, and quota values used by the deploy engine."
+				description="Source, route, runtime, and quota values used by the deploy engine."
 				contentClass="p-0"
 			>
 				<dl class="divide-y divide-gray-100 dark:divide-gray-800">
@@ -213,8 +228,8 @@
 				{#if lastDeploy}
 					<div class="divide-y divide-gray-100 dark:divide-gray-800">
 						<div class="flex items-center justify-between gap-4 px-5 py-3 text-sm">
-							<span class="text-gray-500 dark:text-gray-400">Commit</span>
-							<span class="font-mono font-medium text-gray-950 dark:text-white">{lastDeployCommit}</span>
+							<span class="text-gray-500 dark:text-gray-400">{lastDeploySourceLabel}</span>
+							<span class="max-w-[70%] truncate font-mono font-medium text-gray-950 dark:text-white">{lastDeploySource}</span>
 						</div>
 						<div class="flex items-center justify-between gap-4 px-5 py-3 text-sm">
 							<span class="text-gray-500 dark:text-gray-400">Status</span>

@@ -34,6 +34,36 @@ type CreateValidationInput struct {
 // configuration can never leave a project row behind.
 func (s *Service) CreateValidated(ctx context.Context, request CreateValidationInput) (db.Project, error) {
 	input := request.Project
+	sourceType, err := normalizeSourceType(input.SourceType, input.DeployMode)
+	if err != nil {
+		return db.Project{}, err
+	}
+	input.SourceType = sourceType
+
+	if err := validateLifecycleEnvVars(request.EnvVars); err != nil {
+		return db.Project{}, err
+	}
+
+	if sourceType == SourceTypeRegistry {
+		imageRef, err := normalizeImageRef(input.ImageRef)
+		if err != nil {
+			return db.Project{}, err
+		}
+		input.ImageRef = imageRef
+		input.RepoURL = ""
+		input.Branch = "main"
+		input.DeployMode = "image"
+		input.MainService = nil
+		input.ComposeFilePath = nil
+		input.ComposeOverridePaths = nil
+		input.ComposeProfiles = nil
+		input.ComposeWorkdir = nil
+		input.StaticFrontendPath = nil
+		input.BaseDirectory = nil
+		return s.Create(ctx, input)
+	}
+
+	input.ImageRef = nil
 	input.RepoURL = strings.TrimSpace(input.RepoURL)
 	if input.RepoURL == "" {
 		return db.Project{}, fmt.Errorf("%w: repository URL is required", errs.ErrValidation)
@@ -46,10 +76,6 @@ func (s *Service) CreateValidated(ctx context.Context, request CreateValidationI
 			return db.Project{}, err
 		}
 		input.Branch = branch
-	}
-
-	if err := validateLifecycleEnvVars(request.EnvVars); err != nil {
-		return db.Project{}, err
 	}
 
 	// Auto is resolved from the repository before persistence instead of being

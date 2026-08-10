@@ -14,7 +14,7 @@ func TestProjectHasContainerRuntimeSkipsStaticProjects(t *testing.T) {
 	if projectHasContainerRuntime(db.Project{DeployMode: "static"}) {
 		t.Fatal("static project must not be treated as a missing Docker runtime")
 	}
-	for _, mode := range []string{"dockerfile", "compose"} {
+	for _, mode := range []string{"dockerfile", "compose", "image"} {
 		if !projectHasContainerRuntime(db.Project{DeployMode: mode}) {
 			t.Fatalf("%s project should have a container runtime", mode)
 		}

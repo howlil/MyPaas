@@ -14,7 +14,8 @@
 	import { projectHost, projectURL } from '$lib/utils/urls';
 	import type { ComposeCandidate, ComposeIssue, ComposePlan, ComposePortPlan, ComposeServicePlan, DeployModeDetection, EnvVarDiscovery, RepoInspection, RepoTreeEntry, ResourceProfile } from '$types';
 
-	type DeployModeChoice = 'auto' | 'dockerfile' | 'compose' | 'static';
+	type SourceType = 'git' | 'registry';
+	type DeployModeChoice = 'auto' | 'dockerfile' | 'compose' | 'static' | 'image';
 	type EnvDraft = EnvVarDiscovery & { value: string };
 	type PortSource = 'fallback' | 'detected' | 'manual' | 'static';
 	type ComposeServicePlanPayload = Omit<ComposeServicePlan, 'ports' | 'expose' | 'dependsOn'> & {
@@ -73,7 +74,9 @@
 	let handoffCopyTimer: ReturnType<typeof setTimeout> | undefined;
 	let form = {
 		name: '',
+		sourceType: 'git' as SourceType,
 		repoUrl: '',
+		imageRef: '',
 		branch: '',
 		deployMode: 'auto' as DeployModeChoice,
 		mainService: '',
@@ -90,6 +93,11 @@
 		baseDirectory: ''
 	};
 	let staticFrontendCandidates: string[] = [];
+
+	const sourceTypeOptions = [
+		{ value: 'git', label: 'Git Repository', description: 'Clone & build' },
+		{ value: 'registry', label: 'Container Registry', description: 'Pull image' }
+	];
 
 	const deployModes: Array<{ id: DeployModeChoice; title: string; body: string }> = [
 		{ id: 'auto', title: 'Auto', body: 'Detect' },
@@ -152,6 +160,9 @@
 		?? (missingRequiredEnvKeys.length > 0 ? `Fill required env values: ${missingRequiredEnvKeys.slice(0, 3).join(', ')}${missingRequiredEnvKeys.length > 3 ? '...' : ''}` : '');
 	$: portToServiceMap = buildPortToServiceMap(composePlan?.services ?? []);
 	$: localhostEnvWarnings = detectLocalhostInEnvDrafts(envDrafts, portToServiceMap);
+	$: sourceReady = form.sourceType === 'registry'
+		? Boolean(form.imageRef.trim())
+		: Boolean(form.repoUrl.trim() && form.branch.trim() && repositoryInspectionCurrent);
 	$: currentRepoInspectKey = repositoryInspectionKey();
 	$: repositoryInspectionCurrent = Boolean(
 		form.repoUrl.trim()
@@ -161,9 +172,7 @@
 	);
 	$: canSubmit = Boolean(
 		form.name.trim()
-		&& form.repoUrl.trim()
-		&& form.branch.trim()
-		&& repositoryInspectionCurrent
+		&& sourceReady
 		&& !composeDisabledReason
 		&& !submitting
 		&& !detecting
@@ -171,23 +180,25 @@
 	);
 	$: createDisabledReason = !form.name.trim()
 		? 'Project name is required'
-		: !form.repoUrl.trim()
-			? 'Repository URL is required'
-			: !form.branch.trim()
-				? 'Branch is required'
-				: repoInspectError
-					? repoInspectError
-					: !repositoryInspectionCurrent
-						? 'Repository validation is required for the current branch and base directory'
-						: composeDisabledReason
-							? composeDisabledReason
-							: inspectingRepo
-								? 'Repository branches are loading'
-								: detecting
-									? 'Repository detection is running'
-									: submitting
-										? 'Project creation is running'
-										: '';
+		: form.sourceType === 'registry' && !form.imageRef.trim()
+			? 'Container image is required'
+			: form.sourceType === 'git' && !form.repoUrl.trim()
+				? 'Repository URL is required'
+				: form.sourceType === 'git' && !form.branch.trim()
+					? 'Branch is required'
+					: form.sourceType === 'git' && repoInspectError
+						? repoInspectError
+						: form.sourceType === 'git' && !repositoryInspectionCurrent
+							? 'Repository validation is required for the current branch and base directory'
+							: composeDisabledReason
+								? composeDisabledReason
+								: inspectingRepo
+									? 'Repository branches are loading'
+									: detecting
+										? 'Repository detection is running'
+										: submitting
+											? 'Project creation is running'
+											: '';
 	$: reviewStateLabel = canSubmit ? 'Ready to create' : createDisabledReason || 'Complete required fields';
 	$: detectionStateLabel = detecting
 		? 'Inspecting runtime'
@@ -233,6 +244,32 @@
 		form.resourceProfile = profile.id;
 		form.memoryMb = profile.memoryMb;
 		form.cpuLimit = profile.cpuLimit;
+	}
+
+	function chooseSourceType(sourceType: SourceType) {
+		if (form.sourceType === sourceType) return;
+		form.sourceType = sourceType;
+		error = '';
+		detectMessage = '';
+		composePlan = null;
+		if (sourceType === 'registry') {
+			resetRepositoryInspection();
+			form.deployMode = 'image';
+			form.mainService = '';
+			form.composeFilePath = '';
+			form.composeOverridePaths = '';
+			form.composeProfiles = '';
+			form.composeWorkdir = '';
+			form.staticFrontendPath = '';
+			if (!form.appPort) form.appPort = DEFAULT_APP_PORT;
+			appPortSource = 'fallback';
+			if (form.resourceProfile !== 'custom') applyResourceProfile('node-python');
+		} else if (form.deployMode === 'image') {
+			form.deployMode = 'auto';
+			if (form.appPort === DEFAULT_APP_PORT) form.appPort = '';
+			appPortSource = 'fallback';
+			if (form.repoUrl.trim()) scheduleRepositoryInspection();
+		}
 	}
 
 	function chooseDeployMode(mode: DeployModeChoice) {
@@ -863,11 +900,13 @@
 		submitting = true;
 		error = '';
 		try {
-			await ensureCurrentRepositoryValidation();
+			if (form.sourceType === 'git') {
+				await ensureCurrentRepositoryValidation();
+			}
 
-			let deployMode = form.deployMode;
+			let deployMode = form.sourceType === 'registry' ? 'image' as DeployModeChoice : form.deployMode;
 			let mainService = form.mainService || null;
-			if (deployMode === 'auto') {
+			if (form.sourceType === 'git' && deployMode === 'auto') {
 				const detected = await handleDetectMode(false);
 				deployMode = detected.deployMode;
 				mainService = detected.mainService || mainService;
@@ -875,8 +914,10 @@
 			if (composeDisabledReason) {
 				throw new Error(composeDisabledReason);
 			}
-			if (deployMode === 'static') {
+			if (deployMode === 'static' || deployMode === 'image') {
 				mainService = null;
+			}
+			if (deployMode === 'static') {
 				form.appPort = '80';
 				form.sharedPostgres = false;
 			}
@@ -887,18 +928,16 @@
 				.map((item) => ({ key: normalizeEnvKey(item.key), value: item.value }));
 
 			const composeFilePath = deployMode === 'compose' ? form.composeFilePath.trim() || null : null;
-			const composeOverridePaths = deployMode === 'compose'
-				? splitCommaList(form.composeOverridePaths)
-				: [];
-			const composeProfiles = deployMode === 'compose'
-				? splitCommaList(form.composeProfiles)
-				: [];
+			const composeOverridePaths = deployMode === 'compose' ? splitCommaList(form.composeOverridePaths) : [];
+			const composeProfiles = deployMode === 'compose' ? splitCommaList(form.composeProfiles) : [];
 			const composeWorkdir = deployMode === 'compose' ? form.composeWorkdir.trim() || null : null;
 
 			const project = await api.projects.create({
 				name: form.name,
-				repoUrl: form.repoUrl,
-				branch: form.branch,
+				sourceType: form.sourceType,
+				repoUrl: form.sourceType === 'git' ? form.repoUrl : '',
+				imageRef: form.sourceType === 'registry' ? form.imageRef.trim() : null,
+				branch: form.sourceType === 'git' ? form.branch : '',
 				deployMode,
 				resourceProfile: form.resourceProfile,
 				mainService,
@@ -911,8 +950,8 @@
 				composeOverridePaths,
 				composeProfiles,
 				composeWorkdir,
-				staticFrontendPath: form.staticFrontendPath || null,
-				baseDirectory: form.baseDirectory.trim() || null
+				staticFrontendPath: form.sourceType === 'git' ? form.staticFrontendPath || null : null,
+				baseDirectory: form.sourceType === 'git' ? form.baseDirectory.trim() || null : null
 			});
 			toast.success('Project created');
 			await goto(`/projects/${project.id}`);
@@ -983,7 +1022,7 @@
 
 	<PageHeader
 		title="New project"
-		description="Create a routable deployment target from a Git repository."
+		description="Create a routable deployment target from source code or a pre-built container image."
 	/>
 
 	{#if error}
@@ -1021,98 +1060,107 @@
 	<div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_24rem]">
 		<form class="space-y-5" on:submit|preventDefault={handleSubmit}>
 			<SectionPanel
-				title="Repository source"
-				description="Name the route, load repository branches, and preview the selected branch structure."
+				title="Deployment source"
+				description="Choose whether MyPaas should build source code or run an already-built container image."
 			>
 				<div class="grid gap-4">
 					<div>
 						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="name">Project name</label>
 						<input id="name" type="text" bind:value={form.name} placeholder="my-app" class="field w-full" />
 					</div>
-					<div>
-						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="repo">Repository URL</label>
-						<input
-							id="repo"
-							type="text"
-							value={form.repoUrl}
-							placeholder="https://github.com/username/repo"
-							class="field w-full font-mono"
-							on:input={handleRepoUrlInput}
-							on:blur={() => void inspectRepository(false).catch(() => undefined)}
-						/>
-					</div>
-					<div>
-						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="branch">Branch</label>
-						<div class="flex flex-col gap-2 sm:flex-row">
-							<select
-								id="branch"
-								value={form.branch}
-								class="field min-w-0 flex-1 font-mono"
-								disabled={inspectingRepo || (!branchOptions.length && !form.branch)}
-								on:change={handleBranchChange}
-							>
-								<option value="" disabled>{inspectingRepo ? 'Loading branches...' : 'Select branch'}</option>
-								{#each branchOptions as branch}
-									<option value={branch}>{branch}{branch === defaultBranch ? ' (default)' : ''}</option>
-								{/each}
-							</select>
-							<ActionButton
-								variant="secondary"
-								type="button"
-								on:click={() => void inspectRepository(true, true).catch(() => undefined)}
-								disabled={inspectingRepo || detecting || !form.repoUrl.trim()}
-								loading={inspectingRepo}
-								loadingLabel="Loading..."
-							>
-								Refresh
-							</ActionButton>
+
+					<SegmentedChoice
+						label="Source"
+						value={form.sourceType}
+						options={sourceTypeOptions}
+						on:change={(event) => chooseSourceType(event.detail as SourceType)}
+					/>
+
+					{#if form.sourceType === 'git'}
+						<div>
+							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="repo">Repository URL</label>
+							<input
+								id="repo"
+								type="text"
+								value={form.repoUrl}
+								placeholder="https://github.com/username/repo"
+								class="field w-full font-mono"
+								on:input={handleRepoUrlInput}
+								on:blur={() => void inspectRepository(false).catch(() => undefined)}
+							/>
 						</div>
-					</div>
-					<div>
-						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="baseDirectory">Base directory</label>
-						<input
-							id="baseDirectory"
-							type="text"
-							value={form.baseDirectory}
-							placeholder="/"
-							class="field w-full font-mono"
-							on:input={handleBaseDirectoryInput}
-							on:blur={() => void inspectRepository(false).catch(() => undefined)}
-						/>
-						<p class="mt-1 text-[11px] text-gray-500">Deploy from a specific subdirectory. E.g. <code>frontend</code> or <code>backend/api</code>.</p>
-					</div>
-				</div>
-				{#if repoInspectError}
-					<p class="mt-3 text-xs leading-5 text-red-600 dark:text-red-300">{repoInspectError}</p>
-				{/if}
-				<div class="mt-4">
-					<div class="mb-2 flex items-center justify-between gap-3">
-						<p class="text-xs font-medium text-gray-600 dark:text-gray-300">Repository structure</p>
-						{#if repoTreeTruncated}
-							<span class="shrink-0 text-[11px] text-gray-500 dark:text-gray-400">First {repoTree.length} entries</span>
-						{/if}
-					</div>
-					<div class="max-h-72 overflow-auto rounded-md border border-gray-200 bg-white text-xs dark:border-gray-800 dark:bg-gray-950">
-						{#if repoTree.length > 0}
-							{#each repoTree as item}
-								<div
-									class="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-2 border-b border-gray-100 px-3 py-1.5 last:border-b-0 dark:border-gray-900"
-									style={`padding-left: ${0.75 + item.depth * 0.9}rem;`}
+						<div>
+							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="branch">Branch</label>
+							<div class="flex flex-col gap-2 sm:flex-row">
+								<select
+									id="branch"
+									value={form.branch}
+									class="field min-w-0 flex-1 font-mono"
+									disabled={inspectingRepo || (!branchOptions.length && !form.branch)}
+									on:change={handleBranchChange}
 								>
-									<span class="rounded border border-gray-200 px-1.5 py-0.5 text-[10px] uppercase text-gray-500 dark:border-gray-800 dark:text-gray-400">
-										{item.type === 'directory' ? 'dir' : 'file'}
-									</span>
-									<span class="truncate font-mono {item.type === 'directory' ? 'font-medium text-gray-950 dark:text-white' : 'text-gray-600 dark:text-gray-300'}">
-										{item.path}
-									</span>
-								</div>
-							{/each}
-						{:else}
-							<p class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">
-								{inspectingRepo ? 'Loading repository structure...' : 'Repository structure appears after branches load.'}
-							</p>
+									<option value="" disabled>{inspectingRepo ? 'Loading branches...' : 'Select branch'}</option>
+									{#each branchOptions as branch}
+										<option value={branch}>{branch}{branch === defaultBranch ? ' (default)' : ''}</option>
+									{/each}
+								</select>
+								<ActionButton
+									variant="secondary"
+									type="button"
+									on:click={() => void inspectRepository(true, true).catch(() => undefined)}
+									disabled={inspectingRepo || detecting || !form.repoUrl.trim()}
+									loading={inspectingRepo}
+									loadingLabel="Loading..."
+								>
+									Refresh
+								</ActionButton>
+							</div>
+						</div>
+						<div>
+							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="baseDirectory">Base directory</label>
+							<input
+								id="baseDirectory"
+								type="text"
+								value={form.baseDirectory}
+								placeholder="/"
+								class="field w-full font-mono"
+								on:input={handleBaseDirectoryInput}
+								on:blur={() => void inspectRepository(false).catch(() => undefined)}
+							/>
+							<p class="mt-1 text-[11px] text-gray-500">Deploy from a specific subdirectory. E.g. <code>frontend</code> or <code>backend/api</code>.</p>
+						</div>
+						{#if repoInspectError}
+							<p class="text-xs leading-5 text-red-600 dark:text-red-300">{repoInspectError}</p>
 						{/if}
-					</div>
+						<div>
+							<div class="mb-2 flex items-center justify-between gap-3">
+								<p class="text-xs font-medium text-gray-600 dark:text-gray-300">Repository structure</p>
+								{#if repoTreeTruncated}<span class="shrink-0 text-[11px] text-gray-500 dark:text-gray-400">First {repoTree.length} entries</span>{/if}
+							</div>
+							<div class="max-h-72 overflow-auto rounded-md border border-gray-200 bg-white text-xs dark:border-gray-800 dark:bg-gray-950">
+								{#if repoTree.length > 0}
+									{#each repoTree as item}
+										<div class="grid grid-cols-[2.75rem_minmax(0,1fr)] items-center gap-2 border-b border-gray-100 px-3 py-1.5 last:border-b-0 dark:border-gray-900" style={`padding-left: ${0.75 + item.depth * 0.9}rem;`}>
+											<span class="rounded border border-gray-200 px-1.5 py-0.5 text-[10px] uppercase text-gray-500 dark:border-gray-800 dark:text-gray-400">{item.type === 'directory' ? 'dir' : 'file'}</span>
+											<span class="truncate font-mono {item.type === 'directory' ? 'font-medium text-gray-950 dark:text-white' : 'text-gray-600 dark:text-gray-300'}">{item.path}</span>
+										</div>
+									{/each}
+								{:else}
+									<p class="px-3 py-4 text-sm text-gray-500 dark:text-gray-400">{inspectingRepo ? 'Loading repository structure...' : 'Repository structure appears after branches load.'}</p>
+								{/if}
+							</div>
+						</div>
+					{:else}
+						<div>
+							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="imageRef">Container image</label>
+							<input id="imageRef" type="text" bind:value={form.imageRef} placeholder="ghcr.io/example/my-api:v1.4.0" class="field w-full font-mono" autocomplete="off" />
+							<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Public Docker Hub, GHCR, or another OCI-compatible registry. MyPaas pulls this image directly; private registry credentials are not managed in this MVP.</p>
+						</div>
+						<div class="soft-panel p-3 text-sm">
+							<p class="font-medium text-gray-950 dark:text-white">Pre-built image source</p>
+							<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">No repository clone or image build runs. Deploy pulls the configured reference, applies env/resource limits, maps the app port, and routes traffic through Caddy.</p>
+						</div>
+					{/if}
 				</div>
 			</SectionPanel>
 
@@ -1121,49 +1169,30 @@
 				description="Use detection for repository defaults, then override only the values that need to be explicit."
 			>
 				<svelte:fragment slot="actions">
-					<ActionButton
-						variant="secondary"
-						type="button"
-						on:click={() => void handleDetectMode().catch(() => undefined)}
-						disabled={detecting || inspectingRepo || !form.repoUrl.trim() || !form.branch.trim()}
-						loading={detecting}
-						loadingLabel="Detecting..."
-					>
-						Detect runtime
-					</ActionButton>
+					{#if form.sourceType === 'git'}
+						<ActionButton variant="secondary" type="button" on:click={() => void handleDetectMode().catch(() => undefined)} disabled={detecting || inspectingRepo || !form.repoUrl.trim() || !form.branch.trim()} loading={detecting} loadingLabel="Detecting...">
+							Detect runtime
+						</ActionButton>
+					{/if}
 				</svelte:fragment>
 				<div class="space-y-4">
-					<div
-						class="rounded-md border border-gray-200 bg-gray-50 px-3 py-3 text-sm dark:border-gray-800 dark:bg-gray-950/60"
-						aria-live="polite"
-					>
-						<div class="flex gap-3">
-							<span
-								class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full
-									{detecting
-										? 'bg-yellow-500'
-										: inspectingRepo
-											? 'bg-yellow-500'
-										: detectMessage
-											? 'bg-brand-500'
-											: repoInspectError
-												? 'bg-red-500'
-											: 'bg-gray-400 dark:bg-gray-600'}"
-							></span>
-							<div class="min-w-0">
-								<p class="font-medium text-gray-950 dark:text-white">{detectionStateLabel}</p>
-								<p class="mt-0.5 text-xs leading-5 text-gray-500 dark:text-gray-400">{detectionStateBody}</p>
+					{#if form.sourceType === 'git'}
+						<div class="rounded-md border border-gray-200 bg-gray-50 px-3 py-3 text-sm dark:border-gray-800 dark:bg-gray-950/60" aria-live="polite">
+							<div class="flex gap-3">
+								<span class="mt-1 h-2.5 w-2.5 shrink-0 rounded-full {detecting || inspectingRepo ? 'bg-yellow-500' : detectMessage ? 'bg-brand-500' : repoInspectError ? 'bg-red-500' : 'bg-gray-400 dark:bg-gray-600'}"></span>
+								<div class="min-w-0">
+									<p class="font-medium text-gray-950 dark:text-white">{detectionStateLabel}</p>
+									<p class="mt-0.5 text-xs leading-5 text-gray-500 dark:text-gray-400">{detectionStateBody}</p>
+								</div>
 							</div>
 						</div>
-					</div>
-
-					<SegmentedChoice
-						label="Deployment mode"
-						value={form.deployMode}
-						options={deployModeOptions}
-						on:change={(event) => chooseDeployMode(event.detail as DeployModeChoice)}
-					/>
-
+						<SegmentedChoice label="Deployment mode" value={form.deployMode} options={deployModeOptions} on:change={(event) => chooseDeployMode(event.detail as DeployModeChoice)} />
+					{:else}
+						<div class="rounded-md border border-brand-500/30 bg-brand-50 px-3 py-3 text-sm dark:border-brand-500/40 dark:bg-brand-500/10">
+							<p class="font-medium text-brand-900 dark:text-brand-100">Container image runtime</p>
+							<p class="mt-0.5 text-xs leading-5 text-brand-800 dark:text-brand-200">Runtime mode is fixed for registry sources. Set the port the image listens on; MyPaas handles host allocation and routing.</p>
+						</div>
+					{/if}
 				<div class="grid gap-4 sm:grid-cols-2">
 					{#if form.deployMode === 'compose'}
 						<div>
@@ -1624,13 +1653,17 @@
 						<dd class="mt-1 truncate font-mono font-medium text-gray-950 dark:text-white">{previewHost}</dd>
 					</div>
 					<div class="px-5 py-3">
-						<dt class="text-xs text-gray-500 dark:text-gray-400">Repository</dt>
-						<dd class="mt-1 truncate font-mono text-gray-950 dark:text-white">{form.repoUrl || '-'}</dd>
+						<dt class="text-xs text-gray-500 dark:text-gray-400">Source</dt>
+						<dd class="mt-1 text-gray-950 dark:text-white">{form.sourceType === 'registry' ? 'Container Registry' : 'Git Repository'}</dd>
+					</div>
+					<div class="px-5 py-3">
+						<dt class="text-xs text-gray-500 dark:text-gray-400">{form.sourceType === 'registry' ? 'Image' : 'Repository'}</dt>
+						<dd class="mt-1 truncate font-mono text-gray-950 dark:text-white">{form.sourceType === 'registry' ? (form.imageRef || '-') : (form.repoUrl || '-')}</dd>
 					</div>
 					<div class="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-800">
 						<div class="px-5 py-3">
-							<dt class="text-xs text-gray-500 dark:text-gray-400">Branch</dt>
-							<dd class="mt-1 font-mono text-gray-950 dark:text-white">{form.branch || '-'}</dd>
+							<dt class="text-xs text-gray-500 dark:text-gray-400">{form.sourceType === 'registry' ? 'Pull strategy' : 'Branch'}</dt>
+							<dd class="mt-1 font-mono text-gray-950 dark:text-white">{form.sourceType === 'registry' ? 'docker pull' : (form.branch || '-')}</dd>
 						</div>
 						<div class="px-5 py-3">
 							<dt class="text-xs text-gray-500 dark:text-gray-400">Runtime</dt>

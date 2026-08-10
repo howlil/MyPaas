@@ -38,6 +38,7 @@ func (s *Service) createProjectRecord(ctx context.Context, input CreateInput, na
 			ServiceResources:     input.ServiceResources,
 			StaticFrontendPath:   input.StaticFrontendPath,
 			BaseDirectory:        input.BaseDirectory,
+			ImageRef:             input.ImageRef,
 		})
 		if err != nil {
 			if isProjectUniqueViolation(err) {

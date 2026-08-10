@@ -193,6 +193,8 @@ Wildcard hostname `*.nabilrizkinavisa.me` di Cloudflare Tunnel mengarah ke `loca
 - Jika shared PostgreSQL dipilih, `DATABASE_URL` auto-generated dan ditandai sebagai managed value
 - Jika Compose membawa bundled DB, MyPaas menampilkan catatan bahwa credential Postgres hanya berlaku saat volume DB pertama kali dibuat
 
+- **FR-PROJ-10** Registry-source project menyimpan image reference, tidak menjalankan repository inspection/runtime detection, dan hanya menampilkan konfigurasi yang relevan dengan container image. Private registry authentication berada di luar scope MVP ini.
+
 ### 4.3 Deployment engine
 
 **FR-DEPLOY-1** Deployment support tiga mode:
@@ -252,6 +254,8 @@ Wildcard hostname `*.nabilrizkinavisa.me` di Cloudflare Tunnel mengarah ke `loca
 **FR-DEPLOY-9** Deployment yang gagal tidak boleh mengganggu container yang sedang running (atomic switch: hanya swap container kalau build sukses).
 **FR-DEPLOY-10** Build timeout: maksimal 15 menit. Kalau melebihi, proses di-kill dan status → `failed`.
 **FR-DEPLOY-11** Image yang lama (tidak dipakai container running) dibersihkan otomatis seminggu sekali via scheduled job.
+
+- **FR-DEPLOY-6** Untuk `image` mode, worker menjalankan `docker pull`, merekam repo digest bila tersedia, menulis env file sementara, menjalankan container dengan resource limit + app port yang sama dengan single-container deployment, lalu mengaktifkan route Caddy. Rollback menggunakan image reference/digest dari deployment target.
 
 ### 4.4 Deployment history & rollback
 
