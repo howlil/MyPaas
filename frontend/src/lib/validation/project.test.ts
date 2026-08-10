@@ -30,6 +30,7 @@ describe("resolveProjectAppPort", () => {
   it("returns a detected or manually overridden runtime port", () => {
     expect(resolveProjectAppPort("dockerfile", "3000")).toBe(3000);
     expect(resolveProjectAppPort("compose", "8080")).toBe(8080);
+    expect(resolveProjectAppPort("image", "80")).toBe(80);
   });
 
   it("rejects unresolved runtime ports instead of falling back to 80", () => {
@@ -39,7 +40,9 @@ describe("resolveProjectAppPort", () => {
   });
 
   it("rejects invalid runtime port overrides", () => {
-    expect(() => resolveProjectAppPort("image", "70000")).toThrow(/between 1 and 65535/i);
+    expect(() => resolveProjectAppPort("image", "70000")).toThrow(
+      /between 1 and 65535/i,
+    );
   });
 });
 
