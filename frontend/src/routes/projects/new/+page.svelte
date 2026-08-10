@@ -12,12 +12,13 @@
 	import { api } from '$api';
 	import { toast } from '$stores/toast';
 	import { projectHost, projectURL } from '$lib/utils/urls';
+	import { resolveProjectAppPort } from '$lib/validation/project';
 	import type { ComposeCandidate, ComposeIssue, ComposePlan, ComposePortPlan, ComposeServicePlan, DeployModeDetection, EnvVarDiscovery, RepoInspection, RepoTreeEntry, ResourceProfile } from '$types';
 
 	type SourceType = 'git' | 'registry';
 	type DeployModeChoice = 'auto' | 'dockerfile' | 'compose' | 'static' | 'image';
 	type EnvDraft = EnvVarDiscovery & { value: string };
-	type PortSource = 'fallback' | 'detected' | 'manual' | 'static';
+	type PortSource = 'unresolved' | 'detected' | 'manual' | 'static';
 	type ComposeServicePlanPayload = Omit<ComposeServicePlan, 'ports' | 'expose' | 'dependsOn'> & {
 		ports?: ComposePortPlan[] | null;
 		expose?: number[] | null;
@@ -29,7 +30,6 @@
 		issues?: ComposeIssue[] | null;
 	};
 
-	const DEFAULT_APP_PORT = '80';
 	const publicOriginEnvKeys = new Set([
 		'ALLOWED_ORIGINS',
 		'APP_ORIGIN',
@@ -68,7 +68,7 @@
 	let composeCandidatesError = '';
 	let envDrafts: EnvDraft[] = [];
 	let newEnvKey = '';
-	let appPortSource: PortSource = 'fallback';
+	let appPortSource: PortSource = 'unresolved';
 	let envFileInput: HTMLInputElement | null = null;
 	let copiedHandoffPrompt = '';
 	let handoffCopyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -117,7 +117,7 @@
 	$: previewOrigin = projectURL(form.name || 'your-app', $page.url.protocol, $page.url.hostname);
 	$: selectedProfile = resourceProfiles.find((profile) => profile.id === form.resourceProfile);
 	$: managedDatabaseUrl = form.sharedPostgres && form.deployMode !== 'static';
-	$: effectiveAppPort = form.deployMode === 'static' ? '80' : form.appPort || DEFAULT_APP_PORT;
+	$: effectiveAppPort = form.deployMode === 'static' ? '80' : form.appPort || 'Not detected';
 	$: handoffEnvKeys = Array.from(new Set([
 		...envDrafts.map((item) => normalizeEnvKey(item.key)).filter(Boolean),
 		...(managedDatabaseUrl ? ['DATABASE_URL'] : [])
@@ -138,12 +138,12 @@
 		description: mode.body
 	}));
 	$: portStateLabel = form.deployMode === 'static'
-		? 'Static file server'
+		? 'Managed by Caddy'
 		: appPortSource === 'detected'
 			? 'Detected from repository'
 			: appPortSource === 'manual'
-				? 'Manual override'
-				: 'Fallback if detection finds no port';
+				? 'Advanced manual override'
+				: 'Not detected yet';
 	$: composeBlockingIssues = composePlan?.issues.filter((issue) => issue.severity === 'error') ?? [];
 	$: envDraftValueByKey = new Map(
 		envDrafts
@@ -158,6 +158,7 @@
 		.filter((key) => !((envDraftValueByKey.get(key)?.trim()?.length ?? 0) > 0));
 	$: composeDisabledReason = composeBlockingIssues[0]?.message
 		?? (missingRequiredEnvKeys.length > 0 ? `Fill required env values: ${missingRequiredEnvKeys.slice(0, 3).join(', ')}${missingRequiredEnvKeys.length > 3 ? '...' : ''}` : '');
+	$: runtimePortMissing = form.deployMode !== 'static' && form.deployMode !== 'auto' && !form.appPort.trim();
 	$: portToServiceMap = buildPortToServiceMap(composePlan?.services ?? []);
 	$: localhostEnvWarnings = detectLocalhostInEnvDrafts(envDrafts, portToServiceMap);
 	$: sourceReady = form.sourceType === 'registry'
@@ -173,6 +174,7 @@
 	$: canSubmit = Boolean(
 		form.name.trim()
 		&& sourceReady
+		&& !runtimePortMissing
 		&& !composeDisabledReason
 		&& !submitting
 		&& !detecting
@@ -190,7 +192,11 @@
 						? repoInspectError
 						: form.sourceType === 'git' && !repositoryInspectionCurrent
 							? 'Repository validation is required for the current branch and base directory'
-							: composeDisabledReason
+							: runtimePortMissing
+								? form.sourceType === 'registry'
+									? 'Container port is required for registry images. Set it in Advanced runtime settings.'
+									: 'Application port has not been detected. Run Detect runtime or set an Advanced override.'
+								: composeDisabledReason
 								? composeDisabledReason
 								: inspectingRepo
 									? 'Repository branches are loading'
@@ -225,7 +231,7 @@
 				? repoInspectError
 			: form.repoUrl.trim()
 				? form.branch.trim()
-					? 'Run detection to fill runtime, port, service, and discovered environment defaults.'
+					? 'Run detection to fill runtime, container port, service, and discovered environment defaults.'
 					: 'Branches load automatically after the repository URL is entered.'
 				: 'Paste a repository URL before running detection.';
 
@@ -261,13 +267,13 @@
 			form.composeProfiles = '';
 			form.composeWorkdir = '';
 			form.staticFrontendPath = '';
-			if (!form.appPort) form.appPort = DEFAULT_APP_PORT;
-			appPortSource = 'fallback';
+			form.appPort = '';
+			appPortSource = 'unresolved';
 			if (form.resourceProfile !== 'custom') applyResourceProfile('node-python');
 		} else if (form.deployMode === 'image') {
 			form.deployMode = 'auto';
-			if (form.appPort === DEFAULT_APP_PORT) form.appPort = '';
-			appPortSource = 'fallback';
+			form.appPort = '';
+			appPortSource = 'unresolved';
 			if (form.repoUrl.trim()) scheduleRepositoryInspection();
 		}
 	}
@@ -284,11 +290,11 @@
 			appPortSource = 'static';
 			form.mainService = '';
 			form.sharedPostgres = false;
-		} else if (form.appPort === '80') {
+		} else if (appPortSource === 'static') {
 			form.appPort = '';
-			appPortSource = 'fallback';
+			appPortSource = 'unresolved';
 		} else if (!form.appPort) {
-			appPortSource = 'fallback';
+			appPortSource = 'unresolved';
 		}
 		if (form.resourceProfile !== 'custom') {
 			applyResourceProfile(defaultProfileForMode(mode));
@@ -328,7 +334,7 @@
 			appPortSource = 'manual';
 		} else {
 			form.appPort = '';
-			appPortSource = 'fallback';
+			appPortSource = 'unresolved';
 		}
 		detectedServices = detected.services ?? [];
 		mergeDiscoveredEnvVars(detected.envVars ?? []);
@@ -740,7 +746,7 @@
 
 	function handleAppPortInput(event: Event) {
 		form.appPort = (event.currentTarget as HTMLInputElement).value;
-		appPortSource = form.appPort ? 'manual' : 'fallback';
+		appPortSource = form.appPort ? 'manual' : 'unresolved';
 	}
 
 	function buildDeploymentHandoffPrompt(
@@ -755,10 +761,17 @@
 	) {
 		if (mode !== 'dockerfile' && mode !== 'compose') return '';
 
-		const portRequirement = '- MyPaas automatically routes traffic to port 80 inside the container. Configure the application to listen on 0.0.0.0:80. Do not use or ask for a PORT environment variable.';
+		const portContext = portSource === 'detected'
+			? 'detected by MyPaas'
+			: portSource === 'manual'
+				? 'set as an Advanced override'
+				: 'not resolved yet';
+		const portRequirement = appPort.trim()
+			? `- The container port is ${appPort.trim()} (${portContext}). Keep the application listening on 0.0.0.0:${appPort.trim()} and declare/expose that container port. MyPaas manages the host port and Caddy route automatically.`
+			: '- Make the HTTP application listen on one explicit container port, bind it to 0.0.0.0, and declare that port with Dockerfile EXPOSE or Compose expose/ports so MyPaas can detect it. Do not choose a host port; MyPaas manages host allocation and Caddy routing.';
 		const envRequirement = envKeys.length > 0
-			? `- Preserve and document these environment keys already discovered by MyPaas: ${envKeys.join(', ')}. Remove any PORT or APP_PORT keys since the app must listen on port 80. Do not put secret values in Git.`
-			: '- Discover the runtime environment keys the application needs. Add keys only to .env.example with safe placeholders. Do not add PORT or APP_PORT keys since the app must listen on port 80. Never put secret values in Git.';
+			? `- Preserve and document these environment keys already discovered by MyPaas: ${envKeys.join(', ')}. PORT or APP_PORT are valid when the application uses them to select its container listening port. Do not put secret values in Git.`
+			: '- Discover the runtime environment keys the application needs. Add keys only to .env.example with safe placeholders. PORT or APP_PORT are valid when required by the application. Never put secret values in Git.';
 		const repositoryContext = [
 			projectName.trim() ? `- MyPaas project: ${projectName.trim()}` : '',
 			repoUrl.trim() ? `- Repository: ${repoUrl.trim()}` : '',
@@ -921,7 +934,7 @@
 				form.appPort = '80';
 				form.sharedPostgres = false;
 			}
-			const appPort = deployMode === 'static' ? 80 : Number(form.appPort || DEFAULT_APP_PORT);
+			const appPort = resolveProjectAppPort(deployMode, form.appPort);
 
 			const envVars = envDrafts
 				.filter((item) => normalizeEnvKey(item.key) && item.value.length > 0)
@@ -1190,7 +1203,7 @@
 					{:else}
 						<div class="rounded-md border border-brand-500/30 bg-brand-50 px-3 py-3 text-sm dark:border-brand-500/40 dark:bg-brand-500/10">
 							<p class="font-medium text-brand-900 dark:text-brand-100">Container image runtime</p>
-							<p class="mt-0.5 text-xs leading-5 text-brand-800 dark:text-brand-200">Runtime mode is fixed for registry sources. Set the port the image listens on; MyPaas handles host allocation and routing.</p>
+							<p class="mt-0.5 text-xs leading-5 text-brand-800 dark:text-brand-200">Runtime mode is fixed for registry sources. Repository-based port detection is unavailable for pre-built images in this MVP, so set the container port in Advanced runtime settings. MyPaas still manages host allocation and Caddy routing.</p>
 						</div>
 					{/if}
 				<div class="grid gap-4 sm:grid-cols-2">
@@ -1201,27 +1214,42 @@
 						</div>
 					{/if}
 					{#if form.deployMode !== 'static'}
-						<div>
-							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="appPort">App port</label>
+						<div class="soft-panel p-3 text-sm {form.deployMode === 'compose' ? '' : 'sm:col-span-2'}">
+							<p class="font-medium text-gray-950 dark:text-white">Container port</p>
+							{#if form.appPort}
+								<p class="mt-1 font-mono text-sm text-gray-950 dark:text-white">{form.appPort}</p>
+								<p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{portStateLabel}. Public traffic still enters through Caddy; this is only the application's internal listening port.</p>
+							{:else}
+								<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Not detected yet. MyPaas reads Dockerfile/Compose metadata during runtime detection instead of assuming port 80.</p>
+							{/if}
+						</div>
+					{:else}
+						<div class="soft-panel p-3 text-sm sm:col-span-2">
+							<p class="font-medium text-gray-950 dark:text-white">Static deployment</p>
+							<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Static projects are served directly by Caddy, so no application port or database runtime is required.</p>
+						</div>
+					{/if}
+				</div>
+
+				{#if form.deployMode !== 'static'}
+					<details class="rounded-md border border-gray-200 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-950/40" open={form.sourceType === 'registry' && !form.appPort}>
+						<summary class="cursor-pointer text-sm font-medium text-gray-950 dark:text-white">Advanced runtime settings</summary>
+						<div class="mt-3 max-w-sm">
+							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="appPort">Container port override</label>
 							<input
 								id="appPort"
 								type="number"
 								min="1"
 								max="65535"
 								value={form.appPort}
-								placeholder={DEFAULT_APP_PORT}
+								placeholder="e.g. 3000"
 								on:input={handleAppPortInput}
 								class="field w-full font-mono"
 							/>
-							<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{portStateLabel}</p>
+							<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Normally leave this alone. Use it only when repository detection cannot determine the port, or for a pre-built registry image. This is the container port, not Caddy's public port.</p>
 						</div>
-					{:else}
-						<div class="soft-panel p-3 text-sm sm:col-span-2">
-							<p class="font-medium text-gray-950 dark:text-white">Static deployment</p>
-							<p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Static projects are served by the file server on port 80, so app port and database options are disabled.</p>
-						</div>
-					{/if}
-				</div>
+					</details>
+				{/if}
 				
 				{#if (form.deployMode === 'compose' || form.deployMode === 'dockerfile') && staticFrontendCandidates.length > 0}
 					<div class="mt-4 rounded-md border border-brand-200 bg-brand-50 p-4 dark:border-brand-900/60 dark:bg-brand-950/20">
@@ -1672,7 +1700,7 @@
 					</div>
 					<div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800">
 						<div class="px-5 py-3">
-							<dt class="text-xs text-gray-500 dark:text-gray-400">Port</dt>
+							<dt class="text-xs text-gray-500 dark:text-gray-400">Container port</dt>
 							<dd class="mt-1">
 								<span class="font-mono text-gray-950 dark:text-white">{form.deployMode === 'static' ? '-' : effectiveAppPort}</span>
 								{#if form.deployMode !== 'static'}
