@@ -160,9 +160,10 @@ func (h *Handler) cleanupCreatedProject(r *http.Request, id uuid.UUID) {
 
 func (h *Handler) DetectMode(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RepoURL     string `json:"repoUrl"`
-		Branch      string `json:"branch"`
-		InspectOnly bool   `json:"inspectOnly"`
+		RepoURL       string `json:"repoUrl"`
+		Branch        string `json:"branch"`
+		InspectOnly   bool   `json:"inspectOnly"`
+		BaseDirectory string `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
@@ -170,9 +171,10 @@ func (h *Handler) DetectMode(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.service.DetectMode(r.Context(), DetectInput{
-		RepoURL:     req.RepoURL,
-		Branch:      req.Branch,
-		InspectOnly: req.InspectOnly,
+		RepoURL:       req.RepoURL,
+		Branch:        req.Branch,
+		InspectOnly:   req.InspectOnly,
+		BaseDirectory: req.BaseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
@@ -183,8 +185,9 @@ func (h *Handler) DetectMode(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DetectCompose(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		RepoURL string `json:"repoUrl"`
-		Branch  string `json:"branch"`
+		RepoURL       string `json:"repoUrl"`
+		Branch        string `json:"branch"`
+		BaseDirectory string `json:"baseDirectory"`
 	}
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
@@ -192,8 +195,9 @@ func (h *Handler) DetectCompose(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.service.DetectCompose(r.Context(), DetectComposeInput{
-		RepoURL: req.RepoURL,
-		Branch:  req.Branch,
+		RepoURL:       req.RepoURL,
+		Branch:        req.Branch,
+		BaseDirectory: req.BaseDirectory,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
