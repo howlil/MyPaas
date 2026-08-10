@@ -15,6 +15,7 @@ import (
 	"mypaas/internal/envvar"
 	"mypaas/internal/errs"
 	"mypaas/internal/httpx"
+	"mypaas/internal/repopath"
 )
 
 type Handler struct {
@@ -94,6 +95,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
 		return
+	}
+	if req.BaseDirectory != nil {
+		if err := repopath.Validate(*req.BaseDirectory); err != nil {
+			httpx.DomainError(w, err)
+			return
+		}
+	}
+	if req.StaticFrontendPath != nil {
+		if err := repopath.Validate(*req.StaticFrontendPath); err != nil {
+			httpx.DomainError(w, err)
+			return
+		}
 	}
 	if req.MemoryLimitMb == 0 {
 		req.MemoryLimitMb = req.MemoryMb
@@ -241,6 +254,18 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_JSON", "Request body must be valid JSON.", nil)
 		return
+	}
+	if req.BaseDirectory != nil {
+		if err := repopath.Validate(*req.BaseDirectory); err != nil {
+			httpx.DomainError(w, err)
+			return
+		}
+	}
+	if req.StaticFrontendPath != nil {
+		if err := repopath.Validate(*req.StaticFrontendPath); err != nil {
+			httpx.DomainError(w, err)
+			return
+		}
 	}
 	if req.MemoryLimitMb == 0 {
 		req.MemoryLimitMb = req.MemoryMb

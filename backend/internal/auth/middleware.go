@@ -28,7 +28,7 @@ func Middleware(tokens *TokenService, queries *db.Queries, cfg *config.Config) f
 			}
 
 			if cfg != nil && cfg.ApiToken != "" && raw == cfg.ApiToken {
-				// Bypass JWT validation and impersonate the owner
+				// Bypass JWT validation and impersonate the owner.
 				if cfg.OwnerEmail == "" {
 					httpx.DomainError(w, errs.ErrUnauthorized)
 					return
@@ -38,11 +38,11 @@ func Middleware(tokens *TokenService, queries *db.Queries, cfg *config.Config) f
 					httpx.DomainError(w, err)
 					return
 				}
-				next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), User{
+				serveAuthenticated(w, r, next, queries, User{
 					ID:    user.ID,
 					Email: user.Email,
 					Role:  user.Role,
-				})))
+				})
 				return
 			}
 
@@ -62,13 +62,22 @@ func Middleware(tokens *TokenService, queries *db.Queries, cfg *config.Config) f
 				return
 			}
 
-			next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), User{
+			serveAuthenticated(w, r, next, queries, User{
 				ID:    user.ID,
 				Email: user.Email,
 				Role:  user.Role,
-			})))
+			})
 		})
 	}
+}
+
+func serveAuthenticated(w http.ResponseWriter, r *http.Request, next http.Handler, queries *db.Queries, user User) {
+	authenticated := r.WithContext(WithUser(r.Context(), user))
+	if err := AuthorizeResourceRequest(authenticated.Context(), authenticated.URL.Path, queries, user); err != nil {
+		httpx.DomainError(w, err)
+		return
+	}
+	next.ServeHTTP(w, authenticated)
 }
 
 // resolveOwnerUser looks up the owner user by email.
@@ -80,7 +89,7 @@ func resolveOwnerUser(ctx context.Context, queries *db.Queries, email string) (d
 	if err != pgx.ErrNoRows {
 		return db.User{}, err
 	}
-	// Auto-create the owner user if they haven't logged in yet
+	// Auto-create the owner user if they haven't logged in yet.
 	return queries.CreateUser(ctx, db.CreateUserParams{
 		Email:          email,
 		GithubID:       nil,
