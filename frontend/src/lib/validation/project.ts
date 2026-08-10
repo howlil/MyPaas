@@ -117,6 +117,23 @@ function validatePort(
   }
 }
 
+export function resolveProjectAppPort(deployMode: string, value: string): number {
+  if (deployMode === "static") return 80;
+
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new Error(
+      "Application port could not be detected. Add EXPOSE to the Dockerfile, expose/ports to Compose, or set a container port override in Advanced runtime settings.",
+    );
+  }
+
+  const port = Number(normalized);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("Application port must be an integer between 1 and 65535");
+  }
+  return port;
+}
+
 function validateCommon(record: Record<string, unknown>) {
   validateRepoRelativePath(record, "baseDirectory", "Base directory");
   validateRepoRelativePath(
