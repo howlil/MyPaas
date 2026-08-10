@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveProjectAppPort,
   validateProjectCreateInput,
   validateProjectUpdateInput,
 } from "./project";
@@ -20,6 +21,27 @@ function validCreate(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+describe("resolveProjectAppPort", () => {
+  it("keeps static deployments on port 80", () => {
+    expect(resolveProjectAppPort("static", "")).toBe(80);
+  });
+
+  it("returns a detected or manually overridden runtime port", () => {
+    expect(resolveProjectAppPort("dockerfile", "3000")).toBe(3000);
+    expect(resolveProjectAppPort("compose", "8080")).toBe(8080);
+  });
+
+  it("rejects unresolved runtime ports instead of falling back to 80", () => {
+    expect(() => resolveProjectAppPort("dockerfile", "")).toThrow(
+      /could not be detected/i,
+    );
+  });
+
+  it("rejects invalid runtime port overrides", () => {
+    expect(() => resolveProjectAppPort("image", "70000")).toThrow(/between 1 and 65535/i);
+  });
+});
 
 describe("validateProjectCreateInput", () => {
   it("accepts a backend-compatible project payload", () => {
