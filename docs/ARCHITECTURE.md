@@ -241,6 +241,7 @@ docker compose -f docker-compose.yml up -d
 ### 9.3 Metrics
 - **CPU, RAM, uptime:** `mypaas-statd` cgroup v2 snapshots when `STATD_SOCKET` is configured; Docker-compatible Podman metrics fallback when statd is disabled or unavailable.
 - **Caddy metrics:** Caddy prometheus endpoint (future)
+- **Details:** see `docs/STATD.md` for the PlantUML runtime diagram and Phase 4 benchmark evidence.
 
 ---
 

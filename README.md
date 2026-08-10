@@ -227,7 +227,7 @@ Installer-managed checkouts must be clean. Bootstrap fetches the configured upst
 STATD_SOCKET=/run/mypaas/statd.sock
 ```
 
-`scripts/install-vm.sh` installs it by default from `https://github.com/nabilrn/mypaas-statd.git`, checks out `STATD_REF` (`main` by default), runs the statd repository's `make install`, and enables `mypaas-statd.service`. Operators can set `INSTALL_STATD=false` to skip this step, or set `STATD_REPO_URL`, `STATD_REF`, and `STATD_DIR` to pin a fork, branch, tag, or checkout location.
+`scripts/install-vm.sh` installs it by default from `https://github.com/nabilrn/mypaas-statd.git`, checks out `STATD_REF` (`main` by default), runs the statd repository's `make install`, and enables `mypaas-statd.service`. Operators can set `INSTALL_STATD=false` to skip this step, or set `STATD_REPO_URL`, `STATD_REF`, and `STATD_DIR` to pin a fork, branch, tag, or checkout location. See `docs/STATD.md` for the PlantUML runtime diagram, benchmark table, evidence links, and publish model.
 
 When `STATD_SOCKET` is empty, static projects are involved, or statd is unavailable, MyPaas falls back to the existing Docker-compatible Podman metrics path. When the socket is configured and a live Dockerfile/Compose project is running, the API asks statd for cached cgroup v2 snapshots and avoids spawning Docker/Podman process-discovery commands on steady-state metrics refreshes.
 
@@ -327,7 +327,7 @@ Runtime project metrics use this order:
 2. Docker-compatible Podman fallback when statd is disabled, stopped, not registered yet, or returns no usable snapshot.
 3. Static projects do not use statd because they have no app container runtime.
 
-The accepted Phase 4 performance evidence lives in the `nabilrn/mypaas-statd` repository under `benchmarks/results/phase4-debian13-podman-2026-08-10/`. Those JSON runs compare the Docker-compatible `docker stats --no-stream` baseline against statd protocol v1 with warmup and 500 recorded iterations per trial. Keep new performance claims tied to those raw benchmark files or to a newly recorded benchmark run.
+The accepted Phase 4 performance evidence lives in the `nabilrn/mypaas-statd` repository under `benchmarks/results/phase4-debian13-podman-2026-08-10/`. Those JSON runs compare the Docker-compatible `docker stats --no-stream` baseline against statd protocol v1 with warmup and 500 recorded iterations per trial. `docs/STATD.md` repeats the recorded benchmark values and links to the raw evidence. Keep new performance claims tied to those raw benchmark files or to a newly recorded benchmark run.
 
 The control-plane API exposes:
 
