@@ -227,6 +227,8 @@ Installer-managed checkouts must be clean. Bootstrap fetches the configured upst
 STATD_SOCKET=/run/mypaas/statd.sock
 ```
 
+`scripts/install-vm.sh` installs it by default from `https://github.com/nabilrn/mypaas-statd.git`, checks out `STATD_REF` (`main` by default), runs the statd repository's `make install`, and enables `mypaas-statd.service`. Operators can set `INSTALL_STATD=false` to skip this step, or set `STATD_REPO_URL`, `STATD_REF`, and `STATD_DIR` to pin a fork, branch, tag, or checkout location.
+
 When `STATD_SOCKET` is empty, static projects are involved, or statd is unavailable, MyPaas falls back to the existing Docker-compatible Podman metrics path. When the socket is configured and a live Dockerfile/Compose project is running, the API asks statd for cached cgroup v2 snapshots and avoids spawning Docker/Podman process-discovery commands on steady-state metrics refreshes.
 
 Important host-managed paths include:
