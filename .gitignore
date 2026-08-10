@@ -102,6 +102,7 @@ coverage.out
 
 # Local config
 settings.local.json
+.impeccable/
 backend/tmp_build
 backend/cftest*.go
 docs/MANUAL_TESTING.md

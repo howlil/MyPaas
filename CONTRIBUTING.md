@@ -30,4 +30,12 @@ First off, thank you for considering contributing to MyPaas! It's people like yo
 4. Run all tests locally (`make test` or `pnpm test`).
 5. Open a Pull Request and clearly describe what it fixes or adds.
 
+## Branch Flow
+- `main` must always match the latest accepted production-ready state.
+- Keep a remote `staging` branch for PR integration testing.
+- Review PRs against `main`, but merge accepted PRs into `staging` first when manual validation is needed.
+- Test `staging` locally or in the target environment before promoting the same changes to `main`.
+- After a PR is merged into `main`, local `main` must be updated to follow `origin/main` before starting new work.
+- Start each new implementation or audit from a separate branch. Do not leave review or audit work directly on `main`.
+
 If you have any questions, feel free to open a discussion or an issue!
