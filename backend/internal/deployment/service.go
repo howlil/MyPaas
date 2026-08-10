@@ -78,32 +78,11 @@ func (s *Service) CloudflareAnalytics(ctx context.Context, projectID uuid.UUID) 
 	return client.GetProjectMetrics(ctx, subdomain)
 }
 
-// ReconcileMissingContainers checks all 'running' projects and triggers a manual deployment
-// if their Docker container/compose stack does not exist. This provides auto-recovery after
-// a VM migration or host reboot.
+// ReconcileMissingContainers is retained for compatibility with older callers.
+// New startup code uses ReconcileMissingRuntimes, which skips static projects
+// and uses the same runtime identity as the deployment engine.
 func (s *Service) ReconcileMissingContainers(ctx context.Context) error {
-	projects, err := s.queries.ListRoutableProjects(ctx)
-	if err != nil {
-		return err
-	}
-	for _, p := range projects {
-		name := fmt.Sprintf("mypaas-p-%s", p.ID.String()[:8])
-		if !s.docker.StackExists(ctx, name, p.DeployMode) {
-			// Container/stack doesn't exist, trigger a deployment to rebuild it
-			slog.Info("reconciler: stack missing for running project, triggering deployment", "project", p.Name, "id", p.ID, "mode", p.DeployMode)
-			// Trigger as an automated system action, but use 'manual' since the DB enum only allows manual, webhook, rollback
-			deployment, err := s.queries.CreateDeployment(ctx, db.CreateDeploymentParams{
-				ProjectID:   p.ID,
-				TriggeredBy: "manual",
-			})
-			if err != nil {
-				slog.Error("reconciler: failed to create deployment", "project", p.Name, "error", err)
-				continue
-			}
-			go s.runDeployment(p.ID, deployment.ID)
-		}
-	}
-	return nil
+	return s.ReconcileMissingRuntimes(ctx)
 }
 
 func (s *Service) TriggerDockerfile(ctx context.Context, projectID, userID uuid.UUID) (db.Deployment, error) {
@@ -672,13 +651,17 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 		}
 		return
 	}
-	
+
+	var hybridRelease *staticRelease
 	if project.StaticFrontendPath != nil && *project.StaticFrontendPath != "" {
 		staticWorkspace := filepath.Join(workspace, *project.StaticFrontendPath)
-		if err := s.runStaticFromWorkspace(ctx, project, deploymentID, staticWorkspace, log); err != nil {
+		hybridRelease, err = s.publishStaticFromWorkspace(ctx, project, deploymentID, staticWorkspace, log)
+		if err != nil {
 			s.fail(ctx, deploymentID, projectID, originalStatus, err)
 			return
 		}
+		defer hybridRelease.Rollback()
+		log("Static frontend staged; waiting for runtime deployment before committing release")
 	}
 
 	envs, err := s.envs.DecryptedMap(ctx, project.ID)
@@ -707,6 +690,9 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 		if err := s.runComposeFromWorkspace(ctx, project, deploymentID, workspace, envFile, stringValue(imageTag), log); err != nil {
 			s.fail(ctx, deploymentID, projectID, originalStatus, err)
 			return
+		}
+		if hybridRelease != nil {
+			hybridRelease.Commit()
 		}
 		return
 	}
@@ -747,77 +733,107 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 		slog.Error("finish deployment", "deploymentId", deploymentID, "error", err)
 		return
 	}
+	if hybridRelease != nil {
+		hybridRelease.Commit()
+	}
 	log("Deployment running at " + s.publicURL(project))
 }
 
-func (s *Service) runStaticFromWorkspace(ctx context.Context, project db.Project, deploymentID uuid.UUID, workspace string, log func(string)) error {
+type staticRelease struct {
+	target      string
+	previous    string
+	hadPrevious bool
+	committed   bool
+}
+
+func (release *staticRelease) Commit() {
+	if release == nil || release.committed {
+		return
+	}
+	release.committed = true
+	if release.hadPrevious {
+		if err := os.RemoveAll(release.previous); err != nil {
+			slog.Warn("remove previous static release", "path", release.previous, "error", err)
+		}
+	}
+}
+
+func (release *staticRelease) Rollback() {
+	if release == nil || release.committed {
+		return
+	}
+	if err := os.RemoveAll(release.target); err != nil {
+		slog.Warn("remove failed static release", "path", release.target, "error", err)
+	}
+	if release.hadPrevious {
+		if err := os.Rename(release.previous, release.target); err != nil {
+			slog.Warn("restore previous static release", "path", release.target, "error", err)
+		}
+	}
+}
+
+func (s *Service) publishStaticFromWorkspace(ctx context.Context, project db.Project, deploymentID uuid.UUID, workspace string, log func(string)) (*staticRelease, error) {
 	var source, rel string
 	var err error
 
 	if needsStaticBuild(workspace) {
 		if buildErr := s.buildStaticSPA(ctx, project, deploymentID, workspace, log); buildErr != nil {
-			return fmt.Errorf("static build failed: %w", buildErr)
+			return nil, fmt.Errorf("static build failed: %w", buildErr)
 		}
 		source, rel, err = staticdeploy.FindSiteRoot(workspace)
 		if err != nil {
-			return fmt.Errorf("could not find static output even after build: %w", err)
+			return nil, fmt.Errorf("could not find static output even after build: %w", err)
 		}
 	} else {
 		source, rel, err = staticdeploy.FindSiteRoot(workspace)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	if err := s.setStatus(ctx, deploymentID, "building"); err != nil {
-		return err
+		return nil, err
 	}
 	target := s.staticProjectPath(project)
 	next := target + "-" + deploymentID.String()
 	previous := target + ".previous"
 	if err := os.RemoveAll(next); err != nil {
-		return err
+		return nil, err
 	}
 	if err := os.RemoveAll(previous); err != nil {
-		return err
+		return nil, err
 	}
 
 	log("Publishing static files from " + rel)
 	if err := staticdeploy.CopyDir(source, next); err != nil {
-		return err
+		return nil, err
 	}
 
 	hadPrevious := false
 	if _, err := os.Stat(target); err == nil {
 		if err := os.Rename(target, previous); err != nil {
-			return fmt.Errorf("prepare previous static release: %w", err)
+			return nil, fmt.Errorf("prepare previous static release: %w", err)
 		}
 		hadPrevious = true
 	} else if !os.IsNotExist(err) {
-		return err
+		return nil, err
 	}
-
-	switched := false
-	defer func() {
-		if switched {
-			if err := os.RemoveAll(previous); err != nil {
-				slog.Warn("remove previous static release", "projectId", project.ID, "error", err)
-			}
-			return
-		}
-		if err := os.RemoveAll(target); err != nil {
-			slog.Warn("remove failed static release", "projectId", project.ID, "error", err)
-		}
-		if hadPrevious {
-			if err := os.Rename(previous, target); err != nil {
-				slog.Warn("restore previous static release", "projectId", project.ID, "error", err)
-			}
-		}
-	}()
 
 	if err := os.Rename(next, target); err != nil {
-		return fmt.Errorf("activate static release: %w", err)
+		if hadPrevious {
+			_ = os.Rename(previous, target)
+		}
+		return nil, fmt.Errorf("activate static release: %w", err)
 	}
+	return &staticRelease{target: target, previous: previous, hadPrevious: hadPrevious}, nil
+}
+
+func (s *Service) runStaticFromWorkspace(ctx context.Context, project db.Project, deploymentID uuid.UUID, workspace string, log func(string)) error {
+	release, err := s.publishStaticFromWorkspace(ctx, project, deploymentID, workspace, log)
+	if err != nil {
+		return err
+	}
+	defer release.Rollback()
 
 	if err := s.setStatus(ctx, deploymentID, "starting"); err != nil {
 		return err
@@ -837,8 +853,8 @@ func (s *Service) runStaticFromWorkspace(ctx context.Context, project db.Project
 	if err := s.queries.FinishDeployment(ctx, db.FinishDeploymentParams{ID: deploymentID, Status: "running"}); err != nil {
 		return err
 	}
+	release.Commit()
 	log("Static deployment running at " + s.publicURL(project))
-	switched = true
 	return nil
 }
 

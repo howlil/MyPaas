@@ -112,23 +112,27 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		req.MemoryLimitMb = req.MemoryMb
 	}
 
-	project, err := h.service.Create(r.Context(), CreateInput{
-		UserID:               user.ID,
-		Name:                 req.Name,
-		RepoURL:              req.RepoURL,
-		Branch:               req.Branch,
-		DeployMode:           req.DeployMode,
-		ResourceProfile:      req.ResourceProfile,
-		MainService:          req.MainService,
-		AppPort:              req.AppPort,
-		MemoryLimitMb:        req.MemoryLimitMb,
-		CPULimit:             req.CPULimit,
-		ComposeFilePath:      req.ComposeFilePath,
-		ComposeOverridePaths: req.ComposeOverridePaths,
-		ComposeProfiles:      req.ComposeProfiles,
-		ComposeWorkdir:       req.ComposeWorkdir,
-		StaticFrontendPath:   req.StaticFrontendPath,
-		BaseDirectory:        req.BaseDirectory,
+	project, err := h.service.CreateValidated(r.Context(), CreateValidationInput{
+		Project: CreateInput{
+			UserID:               user.ID,
+			Name:                 req.Name,
+			RepoURL:              req.RepoURL,
+			Branch:               req.Branch,
+			DeployMode:           req.DeployMode,
+			ResourceProfile:      req.ResourceProfile,
+			MainService:          req.MainService,
+			AppPort:              req.AppPort,
+			MemoryLimitMb:        req.MemoryLimitMb,
+			CPULimit:             req.CPULimit,
+			ComposeFilePath:      req.ComposeFilePath,
+			ComposeOverridePaths: req.ComposeOverridePaths,
+			ComposeProfiles:      req.ComposeProfiles,
+			ComposeWorkdir:       req.ComposeWorkdir,
+			StaticFrontendPath:   req.StaticFrontendPath,
+			BaseDirectory:        req.BaseDirectory,
+		},
+		EnvVars:        req.EnvVars,
+		SharedPostgres: req.SharedPostgres,
 	})
 	if err != nil {
 		httpx.DomainError(w, err)
@@ -183,7 +187,7 @@ func (h *Handler) DetectMode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.service.DetectMode(r.Context(), DetectInput{
+	result, err := h.service.DetectModeValidated(r.Context(), DetectInput{
 		RepoURL:       req.RepoURL,
 		Branch:        req.Branch,
 		InspectOnly:   req.InspectOnly,
@@ -267,7 +271,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		req.MemoryLimitMb = req.MemoryMb
 	}
 
-	project, err := h.service.Update(r.Context(), UpdateInput{
+	project, err := h.service.UpdateValidated(r.Context(), UpdateInput{
 		ID:                   id,
 		Name:                 req.Name,
 		Branch:               req.Branch,

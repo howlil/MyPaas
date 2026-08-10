@@ -152,22 +152,42 @@
 		?? (missingRequiredEnvKeys.length > 0 ? `Fill required env values: ${missingRequiredEnvKeys.slice(0, 3).join(', ')}${missingRequiredEnvKeys.length > 3 ? '...' : ''}` : '');
 	$: portToServiceMap = buildPortToServiceMap(composePlan?.services ?? []);
 	$: localhostEnvWarnings = detectLocalhostInEnvDrafts(envDrafts, portToServiceMap);
-	$: canSubmit = Boolean(form.name.trim() && form.repoUrl.trim() && form.branch.trim() && !composeDisabledReason && !submitting && !detecting && !inspectingRepo);
+	$: currentRepoInspectKey = repositoryInspectionKey();
+	$: repositoryInspectionCurrent = Boolean(
+		form.repoUrl.trim()
+		&& form.branch.trim()
+		&& lastRepoInspectKey === currentRepoInspectKey
+		&& !repoInspectError
+	);
+	$: canSubmit = Boolean(
+		form.name.trim()
+		&& form.repoUrl.trim()
+		&& form.branch.trim()
+		&& repositoryInspectionCurrent
+		&& !composeDisabledReason
+		&& !submitting
+		&& !detecting
+		&& !inspectingRepo
+	);
 	$: createDisabledReason = !form.name.trim()
 		? 'Project name is required'
 		: !form.repoUrl.trim()
 			? 'Repository URL is required'
 			: !form.branch.trim()
 				? 'Branch is required'
-				: composeDisabledReason
-					? composeDisabledReason
-					: inspectingRepo
-						? 'Repository branches are loading'
-						: detecting
-							? 'Repository detection is running'
-							: submitting
-								? 'Project creation is running'
-								: '';
+				: repoInspectError
+					? repoInspectError
+					: !repositoryInspectionCurrent
+						? 'Repository validation is required for the current branch and base directory'
+						: composeDisabledReason
+							? composeDisabledReason
+							: inspectingRepo
+								? 'Repository branches are loading'
+								: detecting
+									? 'Repository detection is running'
+									: submitting
+										? 'Project creation is running'
+										: '';
 	$: reviewStateLabel = canSubmit ? 'Ready to create' : createDisabledReason || 'Complete required fields';
 	$: detectionStateLabel = detecting
 		? 'Inspecting runtime'
@@ -185,7 +205,7 @@
 	$: detectionStateBody = detecting
 		? 'MyPaas is checking the selected branch for Dockerfile, Compose, static assets, ports, services, and env hints.'
 		: inspectingRepo
-			? 'Fetching branches and the top-level repository structure.'
+			? 'Fetching branches and the repository structure for the selected base directory.'
 		: detectMessage
 			? detectedServices.length > 0
 				? `Services: ${detectedServices.join(', ')}`
@@ -197,6 +217,10 @@
 					? 'Run detection to fill runtime, port, service, and discovered environment defaults.'
 					: 'Branches load automatically after the repository URL is entered.'
 				: 'Paste a repository URL before running detection.';
+
+	function repositoryInspectionKey() {
+		return `${form.repoUrl.trim()}\n${form.branch.trim()}\n${form.baseDirectory.trim()}`;
+	}
 
 	function defaultProfileForMode(mode: DeployModeChoice): ResourceProfile {
 		if (mode === 'static') return 'static';
@@ -355,26 +379,46 @@
 		return out;
 	}
 
+	function clearDetectedSourceState() {
+		repoInspectRequest += 1;
+		error = '';
+		detectMessage = '';
+		repoInspectError = '';
+		repoInspectMessage = '';
+		repoTree = [];
+		repoTreeTruncated = false;
+		composePlan = null;
+		composeCandidates = [];
+		composeCandidatesError = '';
+		staticFrontendCandidates = [];
+		form.composeFilePath = '';
+		form.composeWorkdir = '';
+		form.staticFrontendPath = '';
+		detectedServices = [];
+		lastRepoInspectKey = '';
+	}
+
 	function handleRepoUrlInput(event: Event) {
 		const value = (event.currentTarget as HTMLInputElement).value;
 		if (value === form.repoUrl) return;
 		form.repoUrl = value;
 		form.branch = '';
-		detectMessage = '';
-		detectedServices = [];
 		resetRepositoryInspection();
 		scheduleRepositoryInspection();
 	}
 
+	function handleBaseDirectoryInput(event: Event) {
+		const value = (event.currentTarget as HTMLInputElement).value;
+		if (value === form.baseDirectory) return;
+		form.baseDirectory = value;
+		clearDetectedSourceState();
+		scheduleRepositoryInspection();
+	}
+
 	function resetRepositoryInspection() {
-		repoInspectError = '';
-		repoInspectMessage = '';
+		clearDetectedSourceState();
 		branchOptions = [];
 		defaultBranch = '';
-		repoTree = [];
-		repoTreeTruncated = false;
-		composePlan = null;
-		lastRepoInspectKey = '';
 	}
 
 	function scheduleRepositoryInspection() {
@@ -389,14 +433,7 @@
 
 	function handleBranchChange(event: Event) {
 		form.branch = (event.currentTarget as HTMLSelectElement).value;
-		detectMessage = '';
-		composePlan = null;
-		composeCandidates = [];
-		staticFrontendCandidates = [];
-		form.composeFilePath = '';
-		form.composeWorkdir = '';
-		form.staticFrontendPath = '';
-		detectedServices = [];
+		clearDetectedSourceState();
 		void inspectRepository(false, true).catch(() => undefined);
 	}
 
@@ -410,7 +447,7 @@
 
 		const requestedBranch = form.branch.trim();
 		const requestKey = `${repoUrl}\n${requestedBranch}\n${form.baseDirectory.trim()}`;
-		if (!force && requestKey === lastRepoInspectKey) {
+		if (!force && requestKey === lastRepoInspectKey && !repoInspectError) {
 			return undefined;
 		}
 
@@ -436,9 +473,9 @@
 			repoInspectMessage = branchOptions.length === 1
 				? '1 branch available'
 				: `${branchOptions.length} branches available`;
-			lastRepoInspectKey = `${repoUrl}\n${form.branch.trim()}\n${form.baseDirectory.trim()}`;
+			lastRepoInspectKey = repositoryInspectionKey();
 			if (showToast) {
-				toast.success('Repository branches loaded');
+				toast.success('Repository validated');
 			}
 			return inspection;
 		} catch (err) {
@@ -448,9 +485,9 @@
 			const message = err instanceof Error ? err.message : 'Failed to inspect repository';
 			repoInspectError = message;
 			repoInspectMessage = '';
-			branchOptions = [];
 			repoTree = [];
 			repoTreeTruncated = false;
+			lastRepoInspectKey = '';
 			if (showToast) {
 				toast.error(message);
 			}
@@ -758,6 +795,7 @@
 
 	onDestroy(() => {
 		if (handoffCopyTimer) clearTimeout(handoffCopyTimer);
+		if (repoInspectTimer) clearTimeout(repoInspectTimer);
 	});
 
 	function issueTone(issue: ComposeIssue) {
@@ -776,13 +814,13 @@
 			error = message;
 			throw new Error(message);
 		}
+		if (!repositoryInspectionCurrent) {
+			await inspectRepository(false, true);
+		}
 		if (!form.branch.trim()) {
-			const inspection = await inspectRepository(false, true);
-			if (!inspection?.branch && !form.branch.trim()) {
-				const message = 'Select a branch before detection';
-				error = message;
-				throw new Error(message);
-			}
+			const message = 'Select a branch before detection';
+			error = message;
+			throw new Error(message);
 		}
 
 		detecting = true;
@@ -800,6 +838,7 @@
 			}
 			return detected;
 		} catch (err) {
+			detectMessage = '';
 			const message = err instanceof Error ? err.message : 'Failed to detect deploy mode';
 			error = message;
 			if (showToast) {
@@ -811,11 +850,21 @@
 		}
 	}
 
+	async function ensureCurrentRepositoryValidation() {
+		if (repositoryInspectionCurrent) return;
+		await inspectRepository(false, true);
+		if (repoInspectError || lastRepoInspectKey !== repositoryInspectionKey()) {
+			throw new Error(repoInspectError || 'Repository validation did not complete for the current source');
+		}
+	}
+
 	async function handleSubmit() {
 		if (submitting || detecting || inspectingRepo) return;
 		submitting = true;
 		error = '';
 		try {
+			await ensureCurrentRepositoryValidation();
+
 			let deployMode = form.deployMode;
 			let mainService = form.mainService || null;
 			if (deployMode === 'auto') {
@@ -1024,9 +1073,10 @@
 						<input
 							id="baseDirectory"
 							type="text"
-							bind:value={form.baseDirectory}
+							value={form.baseDirectory}
 							placeholder="/"
 							class="field w-full font-mono"
+							on:input={handleBaseDirectoryInput}
 							on:blur={() => void inspectRepository(false).catch(() => undefined)}
 						/>
 						<p class="mt-1 text-[11px] text-gray-500">Deploy from a specific subdirectory. E.g. <code>frontend</code> or <code>backend/api</code>.</p>
@@ -1642,9 +1692,9 @@
 					>
 						Create project
 					</ActionButton>
-					{#if form.deployMode === 'auto'}
-						<p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">Auto mode runs detection before the project is created.</p>
-					{/if}
+					<p class="mt-2 text-xs leading-5 text-gray-500 dark:text-gray-400">
+						The current repository, branch, and base directory must validate successfully before creation. The server performs a final deployability preflight before saving the project.
+					</p>
 				</div>
 			</SectionPanel>
 		</aside>
