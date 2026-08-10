@@ -379,6 +379,11 @@ METRICS_PASSWORD=${METRICS_PASSWORD:-$(random_hex 18)}
 MAX_CONCURRENT_DEPLOYS=${MAX_CONCURRENT_DEPLOYS:-2}
 BUILD_TIMEOUT_MINUTES=${BUILD_TIMEOUT_MINUTES:-30}
 
+AUTO_UPDATE_ENABLED=${AUTO_UPDATE_ENABLED:-false}
+AUTO_UPDATE_INTERVAL_MINUTES=${AUTO_UPDATE_INTERVAL_MINUTES:-30}
+AUTO_UPDATE_REF=${AUTO_UPDATE_REF:-main}
+AUTO_UPDATE_IMAGE_WAIT_SECONDS=${AUTO_UPDATE_IMAGE_WAIT_SECONDS:-300}
+
 SHARED_POSTGRES_ENABLED=${SHARED_POSTGRES_ENABLED:-true}
 SHARED_POSTGRES_HOST=postgres
 SHARED_POSTGRES_PORT=5432
@@ -444,6 +449,7 @@ main() {
     local docker_cmd
     docker_cmd="$(docker_prefix)"
     DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" COMPOSE_FILE="$COMPOSE_FILE" ENV_FILE="$ENV_FILE" bash "$ROOT_DIR/scripts/deploy-to-vm.sh"
+    ENV_FILE="$ENV_FILE" bash "$ROOT_DIR/scripts/configure-auto-update.sh"
     
     log "Migration successfully deployed on new VM!"
     exit 0
@@ -461,6 +467,7 @@ main() {
   docker_cmd="$(docker_prefix)"
   log "Starting MyPaas production stack"
   DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" COMPOSE_FILE="$COMPOSE_FILE" ENV_FILE="$ENV_FILE" bash "$ROOT_DIR/scripts/deploy-to-vm.sh"
+  ENV_FILE="$ENV_FILE" bash "$ROOT_DIR/scripts/configure-auto-update.sh"
 
   log "Install complete"
   printf 'Dashboard: https://%s\n' "$(grep -E '^PUBLIC_DOMAIN=' "$ENV_FILE" | cut -d= -f2-)"

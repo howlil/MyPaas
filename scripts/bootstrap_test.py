@@ -24,6 +24,9 @@ class BootstrapTest(unittest.TestCase):
         self.assertIn("MYPAAS_REF", result.stdout)
         self.assertIn("MYPAAS_INSTALL_DIR", result.stdout)
         self.assertIn("INSTALL_WIZARD", result.stdout)
+        self.assertIn("AUTO_UPDATE_ENABLED", result.stdout)
+        self.assertIn("AUTO_UPDATE_INTERVAL_MINUTES", result.stdout)
+        self.assertIn("AUTO_UPDATE_REF", result.stdout)
 
     def test_defaults_to_official_main_repository_and_wizard(self) -> None:
         content = BOOTSTRAP_PATH.read_text(encoding="utf-8")
@@ -33,13 +36,14 @@ class BootstrapTest(unittest.TestCase):
         self.assertIn('INSTALL_WIZARD="${INSTALL_WIZARD:-true}"', content)
         self.assertIn('INSTALL_WIZARD="$INSTALL_WIZARD" bash scripts/install-vm.sh', content)
 
-    def test_existing_checkout_requires_clean_matching_origin(self) -> None:
+    def test_existing_checkout_requires_clean_matching_origin_and_resets_to_fetched_ref(self) -> None:
         content = BOOTSTRAP_PATH.read_text(encoding="utf-8")
 
         self.assertIn("status --porcelain", content)
         self.assertIn("remote get-url origin", content)
         self.assertIn("fetch --depth 1 origin", content)
-        self.assertIn("merge --ff-only FETCH_HEAD", content)
+        self.assertIn("reset --hard FETCH_HEAD", content)
+        self.assertNotIn("merge --ff-only FETCH_HEAD", content)
 
 
 if __name__ == "__main__":
