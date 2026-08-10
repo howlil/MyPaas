@@ -1,0 +1,6 @@
+interface:
+  display_name: "MyPaas Dashboard State Audit"
+  short_description: "Audit dashboard state and UX flows"
+  default_prompt: "Use $mypaas-dashboard-state-audit to audit the current MyPaas dashboard state management and UX state risks."
+policy:
+  allow_implicit_invocation: true

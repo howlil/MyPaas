@@ -1,0 +1,6 @@
+interface:
+  display_name: "MyPaas MCP GOAT"
+  short_description: "Design and audit useful MCP tools"
+  default_prompt: "Use $mypaas-mcp-goat to audit MyPaas MCP capabilities and propose better tools."
+policy:
+  allow_implicit_invocation: true

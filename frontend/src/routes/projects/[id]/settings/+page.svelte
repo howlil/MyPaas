@@ -9,14 +9,21 @@
 	import SectionPanel from '$components/SectionPanel.svelte';
 	import { api } from '$api';
 	import { toast } from '$stores/toast';
-	import type { ComposeResourceSummary, Project, ResourceProfile } from '$types';
-	import { projectHost, webhookURL } from '$lib/utils/urls';
+	import type { ComposeResourceSummary, Project, RepoTreeEntry, ResourceProfile } from '$types';
+	import { webhookURL } from '$lib/utils/urls';
 
 	let project: Project | null = null;
 	let composeResources: ComposeResourceSummary | null = null;
 	let loading = true;
 	let loadError = '';
 	let composeResourceError = '';
+	let repoInspectError = '';
+	let repoInspectMessage = '';
+	let repoTree: RepoTreeEntry[] = [];
+	let repoTreeTruncated = false;
+	let inspectingRepo = false;
+	let repoInspectRequest = 0;
+	let lastRepoInspectKey = '';
 
 	let name        = '';
 	let branch      = '';
@@ -33,6 +40,7 @@
 	let staticFrontendPath   = '';
 	let baseDirectory        = '';
 	let serviceResourcesStr  = '{}';
+	let originalServiceResourcesStr = '{}';
 	let deleteInput = '';
 	let showWebhookSecret = false;
 	let savingSettings = false;
@@ -54,7 +62,7 @@
 		{ id: 'custom',       title: 'Custom',            memoryMb: 512, cpuLimit: 0.5 }
 	];
 
-	$: nameChanged = project && (name !== project.name ||
+	$: settingsChanged = project && (
 	                 (project.sourceType === 'git' && branch !== project.branch) ||
 	                 (project.sourceType === 'registry' && imageRef !== (project.imageRef || '')) ||
 	                 (project.deployMode !== 'static' && appPort !== project.appPort) ||
@@ -65,10 +73,15 @@
 	                 (project.deployMode === 'compose' && composeProfiles !== (project.composeProfiles || []).join(', ')) ||
 	                 staticFrontendPath !== (project.staticFrontendPath || '') ||
 	                 baseDirectory !== (project.baseDirectory || '') ||
-	                 serviceResourcesStr !== JSON.stringify(project.serviceResources || {}) ||
+	                 serviceResourcesStr !== originalServiceResourcesStr ||
 	                 resourceProfile !== project.resourceProfile ||
 	                 memoryMb !== project.memoryLimitMb || cpuLimit !== project.cpuLimit);
-	$: changedProjectHost = projectHost(name || 'your-app', $page.url.hostname);
+	$: repoDirectorySuggestions = repoTree
+		.filter((entry) => entry.type === 'directory' && entry.path !== baseDirectory.trim())
+		.slice(0, 6);
+	$: gitSourceChanged = project?.sourceType === 'git'
+		&& (branch !== project.branch || baseDirectory !== (project.baseDirectory || ''));
+	$: repoValidationStale = gitSourceChanged && repositoryInspectionKey() !== lastRepoInspectKey;
 	$: publicWebhookURL = project ? webhookURL(project.id, $page.url.origin) : '';
 	$: composeResourceTotal = composeResources
 		? composeResources.containers + composeResources.volumes + composeResources.networks
@@ -104,8 +117,12 @@
 			staticFrontendPath = project.staticFrontendPath ?? '';
 			baseDirectory = project.baseDirectory ?? '';
 			serviceResourcesStr = JSON.stringify(project.serviceResources || {}, null, 2);
+			originalServiceResourcesStr = serviceResourcesStr;
 			if (project.deployMode === 'compose') {
 				await loadComposeResources(project.id);
+			}
+			if (project.sourceType === 'git') {
+				void inspectRepository(false, true).catch(() => undefined);
 			}
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load project settings';
@@ -139,10 +156,96 @@
 		resourceProfile = 'custom';
 	}
 
+	function repositoryInspectionKey() {
+		if (!project || project.sourceType !== 'git') return '';
+		return `${project.repoUrl}\n${branch.trim()}\n${baseDirectory.trim()}`;
+	}
+
+	function clearRepositoryValidation() {
+		repoInspectError = '';
+		repoInspectMessage = '';
+		repoTree = [];
+		repoTreeTruncated = false;
+		lastRepoInspectKey = '';
+	}
+
+	function handleBranchInput(event: Event) {
+		branch = (event.currentTarget as HTMLInputElement).value;
+		clearRepositoryValidation();
+	}
+
+	function handleBaseDirectoryInput(event: Event) {
+		baseDirectory = (event.currentTarget as HTMLInputElement).value;
+		clearRepositoryValidation();
+	}
+
+	async function inspectRepository(showToast = false, force = false) {
+		if (!project || project.sourceType !== 'git') return true;
+		const repoUrl = project.repoUrl.trim();
+		if (!repoUrl) return true;
+		const requestKey = repositoryInspectionKey();
+		if (!force && requestKey === lastRepoInspectKey && !repoInspectError) {
+			return true;
+		}
+
+		const requestId = ++repoInspectRequest;
+		inspectingRepo = true;
+		repoInspectError = '';
+		try {
+			const inspection = await api.projects.inspectRepository({
+				repoUrl,
+				branch: branch.trim(),
+				baseDirectory: baseDirectory.trim() || undefined
+			});
+			if (requestId !== repoInspectRequest) return false;
+			if (!branch.trim() && inspection.branch) {
+				branch = inspection.branch;
+			}
+			repoTree = inspection.tree ?? [];
+			repoTreeTruncated = inspection.treeTruncated ?? false;
+			repoInspectMessage = `Repository validated on ${inspection.branch || branch || 'default branch'}`;
+			lastRepoInspectKey = repositoryInspectionKey();
+			if (showToast) {
+				toast.success('Repository validated');
+			}
+			return true;
+		} catch (err) {
+			if (requestId !== repoInspectRequest) return false;
+			const message = err instanceof Error ? err.message : 'Failed to inspect repository';
+			repoInspectError = message;
+			repoInspectMessage = '';
+			repoTree = [];
+			repoTreeTruncated = false;
+			lastRepoInspectKey = '';
+			if (showToast) {
+				toast.error(message);
+			}
+			return false;
+		} finally {
+			if (requestId === repoInspectRequest) {
+				inspectingRepo = false;
+			}
+		}
+	}
+
+	async function validateRepositoryBeforeSave() {
+		if (!project || project.sourceType !== 'git') return true;
+		if (!gitSourceChanged) return true;
+		if (repositoryInspectionKey() === lastRepoInspectKey && !repoInspectError) {
+			return true;
+		}
+		return inspectRepository(false, true);
+	}
+
 	async function handleSave() {
 		if (!project || savingSettings) return;
 		savingSettings = true;
 		try {
+			if (!(await validateRepositoryBeforeSave())) {
+				toast.error(repoInspectError || 'Repository settings could not be validated');
+				savingSettings = false;
+				return;
+			}
 			let parsedResources = {};
 			try {
 				parsedResources = JSON.parse(serviceResourcesStr || '{}');
@@ -152,7 +255,6 @@
 				return;
 			}
 			const payload: Record<string, unknown> = {
-				name,
 				...(project.sourceType === 'git' ? { branch } : { imageRef: imageRef.trim() }),
 				resourceProfile,
 				appPort: Number(appPort),
@@ -170,6 +272,8 @@
 				payload.composeWorkdir = composeWorkdir.trim() || null;
 			}
 			project = await api.projects.update(project.id, payload);
+			originalServiceResourcesStr = serviceResourcesStr;
+			lastRepoInspectKey = repositoryInspectionKey();
 			toast.success('Settings saved');
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Failed to save settings');
@@ -293,12 +397,10 @@
 				<div class="grid gap-4 sm:grid-cols-2">
 					<div class="sm:col-span-2">
 						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="pname">Project name</label>
-						<input id="pname" type="text" bind:value={name} class="field w-full" />
-						{#if name !== project.name}
-							<p class="mt-1 text-xs text-amber-600 dark:text-amber-300">
-								Subdomain will change to <span class="font-mono">{changedProjectHost}</span>
-							</p>
-						{/if}
+						<input id="pname" type="text" value={name} class="field w-full bg-gray-50 text-gray-500 dark:bg-gray-950 dark:text-gray-400" readonly />
+						<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+							Project identity and subdomain are fixed after creation.
+						</p>
 					</div>
 					{#if project.sourceType === 'registry'}
 						<div class="sm:col-span-2">
@@ -309,12 +411,49 @@
 					{:else}
 						<div>
 							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="pbranch">Deploy branch</label>
-							<input id="pbranch" type="text" bind:value={branch} class="field w-full font-mono" />
+							<input id="pbranch" type="text" value={branch} on:input={handleBranchInput} class="field w-full font-mono" />
 						</div>
 						<div>
 							<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="baseDirectory">Base directory</label>
-							<input id="baseDirectory" type="text" bind:value={baseDirectory} placeholder="/" class="field w-full font-mono" />
+							<input id="baseDirectory" type="text" value={baseDirectory} on:input={handleBaseDirectoryInput} placeholder="/" class="field w-full font-mono" />
 							<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Deploy from a specific subdirectory instead of the repo root.</p>
+						</div>
+						<div class="sm:col-span-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs dark:border-gray-800 dark:bg-gray-950/70">
+							<div class="flex flex-wrap items-center justify-between gap-2">
+								<div>
+									{#if inspectingRepo}
+										<p class="text-gray-600 dark:text-gray-300">Validating repository source...</p>
+									{:else if repoInspectError}
+										<p class="text-red-600 dark:text-red-300">{repoInspectError}</p>
+									{:else if repoInspectMessage && !repoValidationStale}
+										<p class="text-emerald-700 dark:text-emerald-300">{repoInspectMessage}</p>
+									{:else}
+										<p class="text-amber-700 dark:text-amber-300">Validate the repository before saving source changes.</p>
+									{/if}
+								</div>
+								<ActionButton size="xs" variant="secondary" on:click={() => void inspectRepository(true, true)} loading={inspectingRepo} loadingLabel="Validating...">
+									Validate source
+								</ActionButton>
+							</div>
+							{#if repoDirectorySuggestions.length > 0}
+								<div class="mt-2 flex flex-wrap gap-2">
+									{#each repoDirectorySuggestions as entry}
+										<button
+											type="button"
+											class="rounded-md border border-gray-200 bg-white px-2 py-1 font-mono text-[11px] text-gray-600 hover:border-brand-300 hover:text-brand-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-brand-700 dark:hover:text-brand-200"
+											on:click={() => {
+												baseDirectory = entry.path;
+												clearRepositoryValidation();
+											}}
+										>
+											{entry.path}
+										</button>
+									{/each}
+								</div>
+							{/if}
+							{#if repoTreeTruncated}
+								<p class="mt-2 text-gray-500 dark:text-gray-400">Repository tree is truncated; enter deeper paths manually if needed.</p>
+							{/if}
 						</div>
 					{/if}
 					{#if project.deployMode !== 'static'}
@@ -450,10 +589,16 @@
 &#125;</pre>
 					</div>
 				</div>
-				{#if nameChanged}
+				{#if settingsChanged}
 					<div class="flex items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/70 px-5 py-3 dark:border-gray-800 dark:bg-gray-900/70">
 						<p class="text-xs text-gray-500 dark:text-gray-400">Unsaved project configuration changes.</p>
-						<ActionButton variant="primary" on:click={handleSave} loading={savingSettings} loadingLabel="Saving...">
+						<ActionButton
+							variant="primary"
+							on:click={handleSave}
+							disabled={project.sourceType === 'git' && repoValidationStale && !repoInspectError}
+							loading={savingSettings}
+							loadingLabel="Saving..."
+						>
 							Save changes
 						</ActionButton>
 					</div>
