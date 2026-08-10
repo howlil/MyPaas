@@ -239,7 +239,7 @@ docker compose -f docker-compose.yml up -d
 - **Access:** Real-time SSE + historical queries
 
 ### 9.3 Metrics
-- **CPU, RAM, uptime:** docker stats
+- **CPU, RAM, uptime:** `mypaas-statd` cgroup v2 snapshots when `STATD_SOCKET` is configured; Docker-compatible Podman metrics fallback when statd is disabled or unavailable.
 - **Caddy metrics:** Caddy prometheus endpoint (future)
 
 ---
