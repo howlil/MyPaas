@@ -39,13 +39,26 @@ func normalizeImageRef(value *string) (*string, error) {
 	if image == "" {
 		return nil, fmt.Errorf("%w: container image reference is required", errs.ErrValidation)
 	}
+	if strings.ContainsAny(image, "\r\n\x00") {
+		return nil, fmt.Errorf("%w: invalid container image reference", errs.ErrValidation)
+	}
+
+	// Registry UIs commonly expose a copyable `docker pull <image>` command.
+	// Accept that exact single-image form while keeping the stored value and
+	// Docker invocation as an image reference rather than arbitrary shell text.
+	fields := strings.Fields(image)
+	if len(fields) == 3 && strings.EqualFold(fields[1], "pull") &&
+		(strings.EqualFold(fields[0], "docker") || strings.EqualFold(fields[0], "podman")) {
+		image = fields[2]
+	}
+
 	if len(image) > 512 {
 		return nil, fmt.Errorf("%w: container image reference is too long", errs.ErrValidation)
 	}
 	if strings.HasPrefix(image, "-") || strings.Contains(image, "://") {
 		return nil, fmt.Errorf("%w: invalid container image reference", errs.ErrValidation)
 	}
-	if strings.ContainsFunc(image, unicode.IsSpace) || strings.ContainsAny(image, "\r\n\x00") {
+	if strings.ContainsFunc(image, unicode.IsSpace) {
 		return nil, fmt.Errorf("%w: container image reference cannot contain whitespace", errs.ErrValidation)
 	}
 

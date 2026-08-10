@@ -8,6 +8,7 @@ import {
 function validCreate(overrides: Record<string, unknown> = {}) {
   return {
     name: "demo-app",
+    sourceType: "git",
     repoUrl: "https://github.com/example/demo",
     branch: "main",
     deployMode: "dockerfile",
@@ -63,6 +64,76 @@ describe("validateProjectCreateInput", () => {
         validCreate({ composeFilePath: "infra\\compose.yml" }),
       ),
     ).toThrow(/forward slashes/);
+  });
+
+  it("accepts a registry project without a repository URL", () => {
+    expect(() =>
+      validateProjectCreateInput(
+        validCreate({
+          sourceType: "registry",
+          repoUrl: "",
+          branch: "",
+          imageRef: "ghcr.io/example/demo:latest",
+          deployMode: "image",
+          appPort: 80,
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  it("infers registry source for legacy image-mode payloads", () => {
+    expect(() =>
+      validateProjectCreateInput(
+        validCreate({
+          sourceType: undefined,
+          repoUrl: "",
+          imageRef: "nginx:latest",
+          deployMode: "image",
+          appPort: 80,
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  it("requires an image reference for registry projects", () => {
+    expect(() =>
+      validateProjectCreateInput(
+        validCreate({
+          sourceType: "registry",
+          repoUrl: "",
+          imageRef: "",
+          deployMode: "image",
+          appPort: 80,
+        }),
+      ),
+    ).toThrow(/Container image/);
+  });
+
+  it("still requires a repository URL for git projects", () => {
+    expect(() =>
+      validateProjectCreateInput(validCreate({ repoUrl: "" })),
+    ).toThrow(/Repository URL/);
+  });
+
+  it("rejects registry projects with a non-image deploy mode", () => {
+    expect(() =>
+      validateProjectCreateInput(
+        validCreate({
+          sourceType: "registry",
+          repoUrl: "",
+          imageRef: "nginx:latest",
+          deployMode: "dockerfile",
+        }),
+      ),
+    ).toThrow(/requires image deploy mode/);
+  });
+
+  it("rejects git projects using image deploy mode", () => {
+    expect(() =>
+      validateProjectCreateInput(
+        validCreate({ deployMode: "image" }),
+      ),
+    ).toThrow(/requires registry source/);
   });
 });
 

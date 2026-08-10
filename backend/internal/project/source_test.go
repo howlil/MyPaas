@@ -31,29 +31,40 @@ func TestNormalizeSourceType(t *testing.T) {
 }
 
 func TestNormalizeImageRef(t *testing.T) {
-	valid := []string{
-		"nginx:latest",
-		"user/my-app:1.2.0",
-		"ghcr.io/user/my-app:latest",
-		"registry.example.com/team/app@sha256:0123456789abcdef",
-	}
-	for _, value := range valid {
-		t.Run("valid_"+value, func(t *testing.T) {
-			got, err := normalizeImageRef(&value)
-			if err != nil {
-				t.Fatalf("normalizeImageRef() error = %v", err)
-			}
-			if got == nil || *got != value {
-				t.Fatalf("normalizeImageRef() = %#v, want %q", got, value)
-			}
-		})
+	tests := []struct {
+		name    string
+		value   string
+		want    string
+		wantErr bool
+	}{
+		{name: "docker hub", value: "nginx:latest", want: "nginx:latest"},
+		{name: "namespaced tag", value: "user/my-app:1.2.0", want: "user/my-app:1.2.0"},
+		{name: "ghcr", value: "ghcr.io/user/my-app:latest", want: "ghcr.io/user/my-app:latest"},
+		{name: "digest", value: "registry.example.com/team/app@sha256:0123456789abcdef", want: "registry.example.com/team/app@sha256:0123456789abcdef"},
+		{name: "copied docker pull", value: "docker pull ghcr.io/user/my-app:latest", want: "ghcr.io/user/my-app:latest"},
+		{name: "copied docker pull extra spacing", value: "  docker   pull   nginx:latest  ", want: "nginx:latest"},
+		{name: "copied podman pull", value: "podman pull registry.example.com/team/app:prod", want: "registry.example.com/team/app:prod"},
+		{name: "empty", value: "", wantErr: true},
+		{name: "whitespace", value: "   ", wantErr: true},
+		{name: "option", value: "-it", wantErr: true},
+		{name: "url", value: "https://ghcr.io/user/app:latest", wantErr: true},
+		{name: "raw whitespace", value: "ghcr.io/user/app latest", wantErr: true},
+		{name: "extra command argument", value: "docker pull nginx:latest extra", wantErr: true},
+		{name: "shell-like suffix", value: "docker pull nginx:latest && echo nope", wantErr: true},
+		{name: "newline", value: "docker pull nginx:latest\necho nope", wantErr: true},
 	}
 
-	invalid := []string{"", "   ", "-it", "https://ghcr.io/user/app:latest", "ghcr.io/user/app latest"}
-	for _, value := range invalid {
-		t.Run("invalid_"+value, func(t *testing.T) {
-			if _, err := normalizeImageRef(&value); err == nil {
-				t.Fatal("normalizeImageRef() expected validation error")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := normalizeImageRef(&tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("normalizeImageRef() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr {
+				return
+			}
+			if got == nil || *got != tt.want {
+				t.Fatalf("normalizeImageRef() = %#v, want %q", got, tt.want)
 			}
 		})
 	}
