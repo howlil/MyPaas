@@ -136,18 +136,54 @@ function validateCommon(record: Record<string, unknown>) {
   validateNonNegativeNumber(record, "cpuLimit", "CPU limit");
 }
 
+function createSourceType(
+  record: Record<string, unknown>,
+  deployMode: string,
+): "git" | "registry" {
+  if (
+    !hasOwn(record, "sourceType") ||
+    record.sourceType === null ||
+    record.sourceType === undefined ||
+    record.sourceType === ""
+  ) {
+    return deployMode === "image" ? "registry" : "git";
+  }
+  if (typeof record.sourceType !== "string") {
+    throw new Error("Source type must be git or registry");
+  }
+  const sourceType = record.sourceType.trim().toLowerCase();
+  if (sourceType !== "git" && sourceType !== "registry") {
+    throw new Error("Source type must be git or registry");
+  }
+  return sourceType;
+}
+
 export function validateProjectCreateInput(input: unknown): void {
   const record = asRecord(input);
   validateName(record, true);
-  validateRequiredString(record, "repoUrl", "Repository URL");
   validateCommon(record);
 
-  if (hasOwn(record, "branch") && record.branch !== "") {
-    validateRequiredString(record, "branch", "Branch");
+  const deployMode =
+    typeof record.deployMode === "string"
+      ? record.deployMode.trim().toLowerCase()
+      : "";
+  const sourceType = createSourceType(record, deployMode);
+
+  if (sourceType === "registry") {
+    validateRequiredString(record, "imageRef", "Container image");
+    if (deployMode && deployMode !== "image") {
+      throw new Error("Registry source requires image deploy mode");
+    }
+  } else {
+    validateRequiredString(record, "repoUrl", "Repository URL");
+    if (deployMode === "image") {
+      throw new Error("Image deploy mode requires registry source");
+    }
+    if (hasOwn(record, "branch") && record.branch !== "") {
+      validateRequiredString(record, "branch", "Branch");
+    }
   }
 
-  const deployMode =
-    typeof record.deployMode === "string" ? record.deployMode : "";
   if (deployMode === "compose") {
     validateRequiredString(record, "mainService", "Main service");
   }
