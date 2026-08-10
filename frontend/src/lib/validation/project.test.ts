@@ -71,6 +71,64 @@ describe("new project UX helpers", () => {
       reason: "",
     });
   });
+
+  it("requires a main service before a compose project can report ready", () => {
+    expect(projectCreationReadiness({
+      name: "demo-app",
+      sourceType: "git",
+      sourceReady: true,
+      deployMode: "compose",
+      mainService: "",
+      appPort: "3000",
+      composeDisabledReason: "",
+      busy: false,
+    })).toEqual({
+      ready: false,
+      state: "Needs configuration",
+      reason: "Choose the public Compose service before creating this project",
+    });
+
+    expect(projectCreationReadiness({
+      name: "demo-app",
+      sourceType: "git",
+      sourceReady: true,
+      deployMode: "compose",
+      mainService: "api",
+      appPort: "3000",
+      composeDisabledReason: "",
+      busy: false,
+    }).ready).toBe(true);
+  });
+
+  it("keeps a required registry container port actionable in the normal flow", () => {
+    expect(projectCreationReadiness({
+      name: "demo-app",
+      sourceType: "registry",
+      sourceReady: true,
+      deployMode: "image",
+      appPort: "",
+      composeDisabledReason: "",
+      busy: false,
+    })).toEqual({
+      ready: false,
+      state: "Needs configuration",
+      reason: "Container port is required for registry images. Enter the container port below.",
+    });
+
+    expect(projectCreationReadiness({
+      name: "demo-app",
+      sourceType: "registry",
+      sourceReady: true,
+      deployMode: "image",
+      appPort: "8080",
+      composeDisabledReason: "",
+      busy: false,
+    })).toEqual({
+      ready: true,
+      state: "Ready to create",
+      reason: "",
+    });
+  });
 });
 
 describe("resolveProjectAppPort", () => {
