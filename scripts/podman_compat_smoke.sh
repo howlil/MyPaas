@@ -82,27 +82,25 @@ mkdir -p "$tmpdir/caddy-run"
 docker run -d \
   --name "$route_name" \
   --network "$project_network" \
-  -p "127.0.0.1:18080:8080" \
-  alpine:3.20 sh -c \
-  'mkdir -p /www && printf "mypaas-route-ok\n" >/www/index.html && httpd -f -p 8080 -h /www' >/dev/null
+  -p "127.0.0.1:18080:80" \
+  nginx:1.27-alpine >/dev/null
 
 docker inspect "$route_name" | grep -q '"HostPort": "18080"'
 docker network connect --alias mypaas-port-18080 "$routing_network" "$route_name"
 
-# DNS registration can be asynchronous on both Docker and Podman. Prove the
-# explicit alias contract with a bounded retry rather than a one-shot lookup.
 alias_ready=false
 for _ in $(seq 1 20); do
   if docker run --rm --network "$routing_network" alpine:3.20 \
-    wget -qO- http://mypaas-port-18080:8080 2>/dev/null | grep -q '^mypaas-route-ok$'; then
+    wget -qO- http://mypaas-port-18080:80 2>/dev/null | grep -q 'Welcome to nginx'; then
     alias_ready=true
     break
   fi
   sleep 0.25
 done
 if [[ "$alias_ready" != "true" ]]; then
-  echo "routing network alias did not become reachable" >&2
+  echo "routing network alias did not become HTTP-reachable" >&2
   docker inspect "$route_name" >&2 || true
+  docker network inspect "$routing_network" >&2 || true
   exit 1
 fi
 
@@ -111,7 +109,7 @@ cat > "$tmpdir/Caddyfile" <<'EOF'
   admin unix//run/mypaas/caddy-admin.sock
 }
 :18081 {
-  reverse_proxy mypaas-port-18080:8080
+  reverse_proxy mypaas-port-18080:80
 }
 EOF
 
@@ -131,7 +129,7 @@ caddy_ready=false
 for _ in $(seq 1 30); do
   if [[ -S "$tmpdir/caddy-run/caddy-admin.sock" ]] && \
     docker run --rm --network "$control_network" alpine:3.20 \
-      wget -qO- http://caddy-edge:18081 2>/dev/null | grep -q '^mypaas-route-ok$'; then
+      wget -qO- http://caddy-edge:18081 2>/dev/null | grep -q 'Welcome to nginx'; then
     caddy_ready=true
     break
   fi
@@ -154,10 +152,9 @@ fi
 cat > "$tmpdir/compose.yml" <<EOF
 services:
   app:
-    image: alpine:3.20
-    command: ["sh", "-c", "mkdir -p /www && printf 'compose-route-ok\\n' >/www/index.html && httpd -f -p 8080 -h /www"]
+    image: nginx:1.27-alpine
     ports:
-      - "127.0.0.1:18082:8080"
+      - "127.0.0.1:18082:80"
     networks:
       - default
       - mypaas_platform
@@ -179,14 +176,16 @@ docker network connect --alias mypaas-port-18082 "$routing_network" "$compose_id
 compose_alias_ready=false
 for _ in $(seq 1 20); do
   if docker run --rm --network "$routing_network" alpine:3.20 \
-    wget -qO- http://mypaas-port-18082:8080 2>/dev/null | grep -q '^compose-route-ok$'; then
+    wget -qO- http://mypaas-port-18082:80 2>/dev/null | grep -q 'Welcome to nginx'; then
     compose_alias_ready=true
     break
   fi
   sleep 0.25
 done
 if [[ "$compose_alias_ready" != "true" ]]; then
-  echo "Compose runtime alias did not become reachable" >&2
+  echo "Compose runtime alias did not become HTTP-reachable" >&2
+  docker inspect "$compose_id" >&2 || true
+  docker network inspect "$routing_network" >&2 || true
   exit 1
 fi
 

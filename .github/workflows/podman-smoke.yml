@@ -35,23 +35,30 @@ jobs:
           docker run -d \
             --name "$target" \
             --network "$source_network" \
-            alpine:3.20 sh -c \
-            'mkdir -p /www && printf "docker-alias-ok\n" >/www/index.html && httpd -f -p 8080 -h /www' >/dev/null
+            alpine:3.20 sleep 300 >/dev/null
           docker network connect \
             --alias mypaas-port-18080 \
             "$routing_network" \
             "$target"
 
+          # Test exactly the contract MyPaaS needs here: the explicit alias on
+          # the secondary user-defined network resolves and reaches the live
+          # container. HTTP behavior is exercised separately in the Podman+Caddy
+          # smoke below.
           ready=false
           for _ in $(seq 1 20); do
             if docker run --rm --network "$routing_network" alpine:3.20 \
-              wget -qO- http://mypaas-port-18080:8080 2>/dev/null | grep -q '^docker-alias-ok$'; then
+              ping -c 1 -W 1 mypaas-port-18080 >/dev/null 2>&1; then
               ready=true
               break
             fi
             sleep 0.25
           done
-          test "$ready" = true
+          if [[ "$ready" != "true" ]]; then
+            docker inspect "$target"
+            docker network inspect "$routing_network"
+            exit 1
+          fi
 
       - name: Install rootful Podman socket
         run: |
