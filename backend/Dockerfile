@@ -10,8 +10,8 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o bin/mypaas-api cmd/api/main.go
-RUN CGO_ENABLED=0 GOOS=linux go build -o bin/mypaas cmd/cli/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o bin/mypaas-api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -o bin/mypaas ./cmd/cli
 
 ## Runtime stage
 FROM alpine:3.19
