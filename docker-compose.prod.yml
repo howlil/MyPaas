@@ -16,11 +16,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - control
+      - projects
 
   api:
     image: ghcr.io/nabilrn/mypaas-api:${MYPAAS_IMAGE_TAG:-latest}
     container_name: mypaas-api
     restart: always
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     environment:
       ENVIRONMENT: production
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -34,9 +41,10 @@ services:
       OWNER_EMAIL: ${OWNER_EMAIL:-}
       DOCKER_SOCKET: ${DOCKER_SOCKET}
       DOCKER_BIND_HOST: ${DOCKER_BIND_HOST:-127.0.0.1}
-      PROJECT_NETWORK: ${PROJECT_NETWORK:-mypaas-prod}
-      CADDY_ADMIN: caddy:2019
-      CADDY_UPSTREAM_HOST: ${CADDY_UPSTREAM_HOST:-host.docker.internal}
+      PROJECT_NETWORK: ${PROJECT_NETWORK:-mypaas-projects}
+      ROUTING_NETWORK: ${ROUTING_NETWORK:-mypaas-routing}
+      CADDY_ADMIN: unix//run/mypaas/caddy-admin.sock
+      CADDY_UPSTREAM_HOST: runtime
       STATIC_ROOT: ${STATIC_ROOT:-/var/lib/mypaas/static}
       CADDY_STATIC_ROOT: ${CADDY_STATIC_ROOT:-/var/lib/mypaas/static}
       STATD_SOCKET: ${STATD_SOCKET:-}
@@ -69,6 +77,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - control
 
   dashboard:
     image: ghcr.io/nabilrn/mypaas-dashboard:${MYPAAS_IMAGE_TAG:-latest}
@@ -78,27 +88,31 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       ORIGIN: https://${PUBLIC_DOMAIN}
+    networks:
+      - control
 
   caddy:
     image: caddy:2-alpine
     container_name: mypaas-caddy-prod
     restart: always
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     ports:
       - "80:80"
-      - "127.0.0.1:2019:2019"
     volumes:
       - ./Caddyfile.prod:/etc/caddy/Caddyfile
+      - /run/mypaas:/run/mypaas
       - /var/lib/mypaas/static:/var/lib/mypaas/static:ro
       - caddy_data:/data
       - caddy_config:/config
+      - caddy_logs:/var/log/caddy
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
-      CADDY_ADMIN: "127.0.0.1:2019"
+      CADDY_ADMIN: "unix//run/mypaas/caddy-admin.sock"
     depends_on:
       - api
       - dashboard
+    networks:
+      - control
+      - routing
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -107,13 +121,22 @@ services:
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       - caddy
+    networks:
+      - control
 
 volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  caddy_logs:
 
 networks:
-  default:
-    name: ${PROJECT_NETWORK:-mypaas-prod}
+  control:
+    name: ${CONTROL_NETWORK:-mypaas-control}
+    external: true
+  projects:
+    name: ${PROJECT_NETWORK:-mypaas-projects}
+    external: true
+  routing:
+    name: ${ROUTING_NETWORK:-mypaas-routing}
     external: true

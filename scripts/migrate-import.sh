@@ -70,11 +70,14 @@ echo "    JWT_SECRET"
 echo ""
 echo "  May need updating:"
 echo "    CLOUDFLARE_TUNNEL_TOKEN  (if creating new tunnel)"
-echo "    GITHUB_CALLBACK_URL     (if domain changed)"
-echo "    DOCKER_BIND_HOST        (usually 127.0.0.1 for prod)"
-echo "    DOCKER_SOCKET           (usually /var/run/docker.sock)"
+echo "    GITHUB_CALLBACK_URL      (if domain changed)"
+echo "    DOCKER_BIND_HOST         (published-port identity binding)"
+echo "    DOCKER_SOCKET            (usually /var/run/docker.sock)"
+echo "    CONTROL_NETWORK          (default mypaas-control)"
+echo "    PROJECT_NETWORK          (default mypaas-projects)"
+echo "    ROUTING_NETWORK          (default mypaas-routing)"
 echo ""
-read -p "  Press Enter after reviewing .env to continue..."
+read -r -p "  Press Enter after reviewing .env to continue..."
 
 # Reload .env
 # shellcheck disable=SC1091
@@ -83,7 +86,13 @@ source .env
 DB_USER="${POSTGRES_USER:?POSTGRES_USER not set}"
 DB_NAME="${POSTGRES_DB:?POSTGRES_DB not set}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-mypaas-postgres-prod}"
-NETWORK="${PROJECT_NETWORK:-mypaas-prod}"
+CONTROL_NETWORK="${CONTROL_NETWORK:-mypaas-control}"
+PROJECT_NETWORK="${PROJECT_NETWORK:-mypaas-projects}"
+ROUTING_NETWORK="${ROUTING_NETWORK:-mypaas-routing}"
+
+if [[ "$CONTROL_NETWORK" == "$PROJECT_NETWORK" || "$CONTROL_NETWORK" == "$ROUTING_NETWORK" || "$PROJECT_NETWORK" == "$ROUTING_NETWORK" ]]; then
+    fail "CONTROL_NETWORK, PROJECT_NETWORK, and ROUTING_NETWORK must be distinct"
+fi
 
 # ── 4. Restore persistent directories ───────────────────────────────
 info "Restoring persistent data..."
@@ -106,13 +115,20 @@ restore_dir "static"
 sudo mkdir -p /var/lib/mypaas/backups
 sudo mkdir -p /tmp/mypaas/builds
 
-# ── 5. Create Docker network ────────────────────────────────────────
-info "Creating Docker network '${NETWORK}'..."
-docker network create "$NETWORK" 2>/dev/null && ok "Network created" || ok "Network already exists"
+# ── 5. Create Docker-compatible networks ────────────────────────────
+info "Ensuring MyPaas control/project/routing networks exist..."
+for network in "$CONTROL_NETWORK" "$PROJECT_NETWORK" "$ROUTING_NETWORK"; do
+    if docker network inspect "$network" >/dev/null 2>&1; then
+        ok "Network $network already exists"
+    else
+        docker network create "$network" >/dev/null
+        ok "Network $network created"
+    fi
+done
 
 # ── 6. Start PostgreSQL ─────────────────────────────────────────────
 info "Starting PostgreSQL..."
-docker compose -f docker-compose.prod.yml up -d postgres
+docker compose -f docker-compose.prod.yml --env-file .env up -d postgres
 
 info "Waiting for PostgreSQL to be healthy..."
 for i in $(seq 1 60); do
@@ -190,8 +206,8 @@ fi
 
 # ── 9. Start full stack ──────────────────────────────────────────────
 info "Pulling and starting MyPaas stack..."
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml --env-file .env pull
+docker compose -f docker-compose.prod.yml --env-file .env up -d
 
 # ── 10. Cleanup ──────────────────────────────────────────────────────
 rm -rf "$IMPORT_DIR"
@@ -222,7 +238,7 @@ echo "     done"
 echo ""
 echo "  4. If you created a new Cloudflare Tunnel:"
 echo "     - Update CLOUDFLARE_TUNNEL_TOKEN in .env"
-echo "     - docker compose -f docker-compose.prod.yml up -d cloudflared"
+echo "     - docker compose -f docker-compose.prod.yml --env-file .env up -d cloudflared"
 echo ""
-echo "  5. Verify all project subdomains are accessible"
+echo "  5. Run scripts/verify-production.sh and verify project subdomains"
 echo ""

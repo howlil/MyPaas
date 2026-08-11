@@ -88,6 +88,18 @@ func cloneRuntimeProcesses(runtimes []container.RuntimeProcess) []container.Runt
 	return out
 }
 
+func singleRuntimeFromCache(cache *statdRuntimeCache, project db.Project, service string) (container.RuntimeProcess, bool) {
+	runtimes, ok := cache.get(project)
+	if !ok || len(runtimes) != 1 {
+		return container.RuntimeProcess{}, false
+	}
+	runtime := runtimes[0]
+	if runtime.PID <= 0 || strings.TrimSpace(runtime.Service) != strings.TrimSpace(service) {
+		return container.RuntimeProcess{}, false
+	}
+	return runtime, true
+}
+
 // PreferredContainerMetricsList uses mypaas-statd when it is explicitly
 // configured and falls back to the existing Docker metrics path on any statd
 // availability/integration failure. This keeps rollout reversible.
@@ -110,21 +122,34 @@ func (s *Service) PreferredContainerMetricsList(ctx context.Context, projectID u
 	if project.DeployMode == "compose" {
 		metrics, err = s.composeStatdMetrics(ctx, project, client, cache)
 	} else {
-		metrics, err = s.singleStatdMetrics(ctx, project, client)
+		metrics, err = s.singleStatdMetrics(ctx, project, client, cache)
 	}
 	if err == nil && len(metrics) > 0 {
+		if statd.MarkAvailable(true) == statd.AvailabilityRecovered {
+			slog.Info("statd metrics path recovered")
+		}
 		return metrics, nil
 	}
 
-	slog.Debug("statd metrics unavailable; using Docker fallback",
-		"projectId", project.ID,
-		"mode", project.DeployMode,
-		"error", err,
-	)
+	transition := statd.MarkAvailable(false)
+	statd.RecordFallback()
+	if transition == statd.AvailabilityInitialUnavailable || transition == statd.AvailabilityLost {
+		slog.Warn("statd metrics unavailable; using Docker fallback",
+			"projectId", project.ID,
+			"mode", project.DeployMode,
+			"error", err,
+		)
+	} else {
+		slog.Debug("statd metrics unavailable; using Docker fallback",
+			"projectId", project.ID,
+			"mode", project.DeployMode,
+			"error", err,
+		)
+	}
 	return s.ContainerMetricsList(ctx, projectID)
 }
 
-func (s *Service) singleStatdMetrics(ctx context.Context, project db.Project, client *statd.Client) ([]container.Metrics, error) {
+func (s *Service) singleStatdMetrics(ctx context.Context, project db.Project, client *statd.Client, cache *statdRuntimeCache) ([]container.Metrics, error) {
 	service := mainService(project)
 	if strings.TrimSpace(service) == "" {
 		service = "app"
@@ -134,23 +159,48 @@ func (s *Service) singleStatdMetrics(ctx context.Context, project db.Project, cl
 		return nil, err
 	}
 
-	snapshot, err := client.Snapshot(ctx, id)
-	startedAt := time.Time{}
-	if err != nil || snapshot.Stale {
-		runtime, runtimeErr := s.docker.RuntimeProcess(ctx, containerName(project.Name))
-		if runtimeErr != nil {
-			return nil, runtimeErr
+	// Keep StartedAt/PID in the same bounded handler-owned cache used by Compose.
+	// A cold cache performs one inspect, while steady-state statd reads do not
+	// need Docker process discovery merely to preserve uptime.
+	runtime, cached := singleRuntimeFromCache(cache, project, service)
+	if !cached {
+		runtime, err = s.docker.RuntimeProcess(ctx, containerName(project.Name))
+		if err != nil {
+			return nil, err
 		}
-		startedAt = runtime.StartedAt
+		runtime.Service = service
+		cache.put(project, []container.RuntimeProcess{runtime})
+	}
+
+	snapshot, snapshotErr := client.Snapshot(ctx, id)
+	recordUnexpectedSnapshotError(snapshotErr)
+	if snapshotErr != nil || snapshot.Stale {
 		if snapshot.Stale {
 			_ = client.Unregister(ctx, id)
 		}
 		if err := registerAndSnapshot(ctx, client, id, runtime.PID, &snapshot); err != nil {
-			return nil, err
+			if !cached || !runtimeIdentityMayBeStale(err) {
+				return nil, err
+			}
+
+			// A cached PID can become invalid after an out-of-band runtime
+			// replacement. Refresh only after statd explicitly rejects the
+			// cached identity; daemon/socket failures go directly to fallback.
+			cache.invalidate(project.ID)
+			freshRuntime, discoveryErr := s.docker.RuntimeProcess(ctx, containerName(project.Name))
+			if discoveryErr != nil {
+				return nil, fmt.Errorf("refresh single runtime metadata after statd failure: %w", discoveryErr)
+			}
+			freshRuntime.Service = service
+			if retryErr := registerAndSnapshot(ctx, client, id, freshRuntime.PID, &snapshot); retryErr != nil {
+				return nil, retryErr
+			}
+			runtime = freshRuntime
+			cache.put(project, []container.RuntimeProcess{freshRuntime})
 		}
 	}
 
-	return []container.Metrics{metricFromStatd(service, snapshot, startedAt)}, nil
+	return []container.Metrics{metricFromStatd(service, snapshot, runtime.StartedAt)}, nil
 }
 
 func (s *Service) composeStatdMetrics(ctx context.Context, project db.Project, client *statd.Client, cache *statdRuntimeCache) ([]container.Metrics, error) {
@@ -168,13 +218,13 @@ func (s *Service) composeStatdMetrics(ctx context.Context, project db.Project, c
 		cache.put(project, runtimes)
 		return metrics, nil
 	}
-	if !cached {
+	if !cached || !runtimeIdentityMayBeStale(err) {
 		return nil, err
 	}
 
 	// Cached PIDs normally let statd re-register after a daemon restart without
-	// touching Docker. Re-discover only when that cached runtime identity no
-	// longer works (container replacement/restart outside the known lifecycle).
+	// touching Docker. Re-discover only when statd explicitly rejects the
+	// cached identity (container replacement/restart outside known lifecycle).
 	cache.invalidate(project.ID)
 	freshRuntimes, discoveryErr := s.docker.ComposeRuntimeProcesses(ctx, composeProjectName(project.Name))
 	if discoveryErr != nil {
@@ -199,6 +249,7 @@ func composeStatdSnapshots(ctx context.Context, project db.Project, client *stat
 			return nil, err
 		}
 		snapshot, snapshotErr := client.Snapshot(ctx, id)
+		recordUnexpectedSnapshotError(snapshotErr)
 		if snapshotErr != nil || snapshot.Stale {
 			if snapshot.Stale {
 				_ = client.Unregister(ctx, id)
@@ -213,6 +264,22 @@ func composeStatdSnapshots(ctx context.Context, project db.Project, client *stat
 	return metrics, nil
 }
 
+func recordUnexpectedSnapshotError(err error) {
+	if err == nil {
+		return
+	}
+	var protocolErr *statd.ProtocolError
+	if errors.As(err, &protocolErr) && protocolErr.Code == "NOT_FOUND" {
+		return
+	}
+	statd.RecordSnapshotError()
+}
+
+func runtimeIdentityMayBeStale(err error) bool {
+	var protocolErr *statd.ProtocolError
+	return errors.As(err, &protocolErr) && protocolErr.Code == "REGISTER_FAILED"
+}
+
 func registerAndSnapshot(ctx context.Context, client *statd.Client, id string, pid int, out *statd.Snapshot) error {
 	if client == nil || out == nil {
 		return errors.New("statd client and output are required")
@@ -221,17 +288,21 @@ func registerAndSnapshot(ctx context.Context, client *statd.Client, id string, p
 		var protocolErr *statd.ProtocolError
 		if errors.As(err, &protocolErr) && protocolErr.Code == "REGISTER_FAILED" {
 			if unregisterErr := client.Unregister(ctx, id); unregisterErr != nil {
+				statd.RecordRegistrationError()
 				return fmt.Errorf("replace statd registration: unregister: %w", unregisterErr)
 			}
 			if retryErr := client.Register(ctx, id, pid); retryErr != nil {
+				statd.RecordRegistrationError()
 				return fmt.Errorf("replace statd registration: register: %w", retryErr)
 			}
 		} else {
+			statd.RecordRegistrationError()
 			return err
 		}
 	}
 	snapshot, err := client.Snapshot(ctx, id)
 	if err != nil {
+		statd.RecordSnapshotError()
 		return err
 	}
 	*out = snapshot

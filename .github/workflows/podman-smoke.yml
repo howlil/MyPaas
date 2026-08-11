@@ -1,0 +1,72 @@
+name: Podman compatibility
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  docker-cli-on-podman:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify Docker explicit network-alias contract
+        run: |
+          set -euo pipefail
+          source_network=mypaas-ci-docker-source
+          routing_network=mypaas-ci-docker-routing
+          target=mypaas-ci-docker-alias-target
+          cleanup() {
+            docker rm -f "$target" >/dev/null 2>&1 || true
+            docker network rm "$routing_network" >/dev/null 2>&1 || true
+            docker network rm "$source_network" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          docker network create "$source_network" >/dev/null
+          docker network create "$routing_network" >/dev/null
+          docker run -d \
+            --name "$target" \
+            --network "$source_network" \
+            alpine:3.20 sh -c \
+            'mkdir -p /www && printf "docker-alias-ok\n" >/www/index.html && httpd -f -p 8080 -h /www' >/dev/null
+          docker network connect \
+            --alias mypaas-port-18080 \
+            "$routing_network" \
+            "$target"
+
+          ready=false
+          for _ in $(seq 1 20); do
+            if docker run --rm --network "$routing_network" alpine:3.20 \
+              wget -qO- http://mypaas-port-18080:8080 2>/dev/null | grep -q '^docker-alias-ok$'; then
+              ready=true
+              break
+            fi
+            sleep 0.25
+          done
+          test "$ready" = true
+
+      - name: Install rootful Podman socket
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman catatonit
+          sudo systemctl stop docker.service docker.socket || true
+          sudo rm -f /var/run/docker.sock
+          sudo systemctl enable --now podman.socket
+          sudo ln -s /run/podman/podman.sock /var/run/docker.sock
+
+      - name: Verify Docker CLI is backed by Podman
+        run: |
+          sudo docker version | tee /tmp/mypaas-docker-version.txt
+          grep -q 'Podman Engine' /tmp/mypaas-docker-version.txt
+          sudo docker compose version
+
+      - name: Run MyPaaS Podman compatibility smoke
+        run: sudo -E bash scripts/podman_compat_smoke.sh

@@ -446,6 +446,7 @@ func handleMetrics(cfg *config.Config, startedAt time.Time) http.HandlerFunc {
 		_, _ = fmt.Fprintf(w, "# TYPE mypaas_go_goroutines gauge\nmypaas_go_goroutines %d\n", runtime.NumGoroutine())
 		_, _ = fmt.Fprintf(w, "# HELP mypaas_go_heap_alloc_bytes Current heap allocation in bytes.\n")
 		_, _ = fmt.Fprintf(w, "# TYPE mypaas_go_heap_alloc_bytes gauge\nmypaas_go_heap_alloc_bytes %d\n", mem.HeapAlloc)
+		writeStatdMetrics(w)
 	}
 }
 

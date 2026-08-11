@@ -17,20 +17,21 @@ Internet
    |
 Cloudflare Tunnel
    |
- Caddy
-   |---------------------> SvelteKit dashboard
-   |---------------------> Go API
-   |                         |
-   |                         +--> PostgreSQL control-plane database
-   |                         +--> Caddy Admin API
-   |                         +--> Docker-compatible CLI/socket
-   |                                  |
-   |                                  +--> Docker Engine
-   |                                  `--> Podman socket compatibility
+ Caddy  <----- Unix Admin socket -----> Go API
+   |                                      |
+   |---------------------> dashboard      +--> PostgreSQL
+   |                                      +--> Docker-compatible CLI/socket
+   |                                      |        |--> Docker Engine
+   |                                      |        `--> Podman socket compatibility
+   |                                      `--> mypaas-statd Unix socket
    |
-   `----------------------> project routes
-                              |--> container-backed applications
-                              `--> static files under /var/lib/mypaas/static
+   +----------------------> static files
+   |
+   `----------------------> routed runtimes through ROUTING_NETWORK
+
+PROJECT_NETWORK: user workloads + optional shared PostgreSQL
+CONTROL_NETWORK: API/dashboard/cloudflared/PostgreSQL/Caddy
+ROUTING_NETWORK: Caddy + only explicitly routed runtimes
 ```
 
 MyPaas currently targets a **single Linux VM**, not a Kubernetes cluster. The runtime abstraction is intentionally small: the backend invokes the `docker` CLI and Docker-compatible socket contract even when Podman is the actual engine.
@@ -175,10 +176,11 @@ The bootstrap flow:
 4. starts the browser setup wizard by default;
 5. writes the production `.env`;
 6. prepares persistent host directories;
-7. creates the project network;
-8. starts PostgreSQL and runs migrations;
-9. starts the production Compose stack through the Docker-compatible command surface;
-10. configures optional self-updates and leaves verification available through `scripts/verify-production.sh`.
+7. provisions the distinct control, project, and routing networks;
+8. installs the pinned, checksum-verified `mypaas-statd` release by default when supported;
+9. starts PostgreSQL and runs migrations;
+10. starts the production Compose stack through the Docker-compatible command surface;
+11. configures optional self-updates and leaves verification available through `scripts/verify-production.sh`.
 
 The setup wizard binds to `127.0.0.1`. It can be exposed temporarily through a token-protected Cloudflare Quick Tunnel. SSH forwarding remains the fallback:
 
@@ -221,15 +223,15 @@ Installer-managed checkouts must be clean. Bootstrap fetches the configured upst
 - `caddy` — dashboard/API/project routing and static serving;
 - `cloudflared` — outbound Cloudflare Tunnel client.
 
-`mypaas-statd` is not a sixth control-plane container and is not pulled from GHCR. It is an optional host-native systemd daemon installed on the VM as `/usr/local/bin/mypaas-statd`. The API uses it only through the Unix socket configured by:
+`mypaas-statd` is not a sixth control-plane container and is not pulled from GHCR. It is a host-native systemd daemon installed on the VM as `/usr/local/bin/mypaas-statd`. The API uses it only through the Unix socket configured by:
 
 ```text
 STATD_SOCKET=/run/mypaas/statd.sock
 ```
 
-`scripts/install-vm.sh` installs it by default from `https://github.com/nabilrn/mypaas-statd.git`, checks out `STATD_REF` (`main` by default), runs the statd repository's `make install`, and enables `mypaas-statd.service`. Operators can set `INSTALL_STATD=false` to skip this step, or set `STATD_REPO_URL`, `STATD_REF`, and `STATD_DIR` to pin a fork, branch, tag, or checkout location. See `docs/STATD.md` for the PlantUML runtime diagram, benchmark table, evidence links, and publish model.
+Production installation is version-pinned. The default installer targets `STATD_VERSION=v0.1.0`, downloads `mypaas-statd-linux-amd64.tar.gz` plus `SHA256SUMS`, verifies the selected checksum and bundled `VERSION`, installs the binary/systemd unit, and waits for the socket after enabling the service. Set `INSTALL_STATD=false` to keep the Docker-compatible metrics path only. `STATD_INSTALL_MODE=source` remains an explicit development/fork fallback rather than the production default. See `docs/STATD.md` for the protocol, benchmark evidence, compatibility contract, and distribution model.
 
-When `STATD_SOCKET` is empty, static projects are involved, or statd is unavailable, MyPaas falls back to the existing Docker-compatible Podman metrics path. When the socket is configured and a live Dockerfile/Compose project is running, the API asks statd for cached cgroup v2 snapshots and avoids spawning Docker/Podman process-discovery commands on steady-state metrics refreshes.
+When `STATD_SOCKET` is empty, static projects are involved, or statd is unavailable, MyPaas falls back to the existing Docker-compatible metrics path. When the socket is configured and a live Dockerfile/Compose project is running, the API asks statd for cached cgroup v2 snapshots and avoids spawning Docker/Podman process-discovery commands on steady-state metrics refreshes.
 
 Important host-managed paths include:
 
@@ -271,7 +273,7 @@ Environment discovery scans common templates including:
 
 For Compose/monorepo repositories, MyPaas can discover nested templates, attribute variables to services, identify conflicting defaults, and generate service-local `.env` files during deployment without overwriting a committed `.env` beside the template.
 
-Persisted environment values are encrypted before storage.
+Persisted environment values are encrypted before storage. Docker Compose subprocesses use a minimal host-environment allowlist; project variables are passed through the project `--env-file` instead of inheriting arbitrary control-plane credentials.
 
 ---
 
@@ -324,10 +326,12 @@ Project operations expose runtime CPU/memory snapshots, uptime, per-service Comp
 Runtime project metrics use this order:
 
 1. `mypaas-statd` over `STATD_SOCKET` for live Dockerfile and Compose projects.
-2. Docker-compatible Podman fallback when statd is disabled, stopped, not registered yet, or returns no usable snapshot.
+2. Docker-compatible fallback when statd is disabled, stopped, not registered yet, or returns no usable snapshot.
 3. Static projects do not use statd because they have no app container runtime.
 
 The accepted Phase 4 performance evidence lives in the `nabilrn/mypaas-statd` repository under `benchmarks/results/phase4-debian13-podman-2026-08-10/`. Those JSON runs compare the Docker-compatible `docker stats --no-stream` baseline against statd protocol v1 with warmup and 500 recorded iterations per trial. `docs/STATD.md` repeats the recorded benchmark values and links to the raw evidence. Keep new performance claims tied to those raw benchmark files or to a newly recorded benchmark run.
+
+The current Compose log collection path remains Docker-compatible CLI based. `benchmarks/log_path.py` mirrors that path so process-spawn/CPU/latency evidence can be recorded before deciding whether a persistent/native log collector is justified.
 
 The control-plane API exposes:
 
@@ -337,7 +341,7 @@ The control-plane API exposes:
 /metrics
 ```
 
-`/metrics` is Prometheus-compatible. In production, metrics Basic Auth credentials must be configured and valid credentials are required to read the endpoint.
+`/metrics` is Prometheus-compatible. In production, metrics Basic Auth credentials must be configured and valid credentials are required to read the endpoint. Statd availability and fallback/error counters are exposed with low cardinality so fallback is observable rather than silent.
 
 ---
 
@@ -400,6 +404,8 @@ The resulting download token expires after **24 hours**. A new VM can import the
 ```bash
 bash scripts/install-vm.sh --migrate-url <migration-url>
 ```
+
+Migration import restores the environment and provisions the control, project, and routing external networks before bringing up PostgreSQL and the full production stack.
 
 ### Engine-managed Compose volumes
 
@@ -495,7 +501,7 @@ Production scripts use the `docker`/`docker compose` command surface. On a Podma
 # Deploy current checkout
 bash scripts/deploy-to-vm.sh
 
-# Verify containers, API readiness, Caddy Admin API, and CLI
+# Verify topology, containers, API readiness, statd, Caddy Unix Admin, and CLI
 bash scripts/verify-production.sh
 
 # Verify a manual PostgreSQL backup too
@@ -513,10 +519,14 @@ SKIP_DEPLOY=true bash scripts/install-vm.sh
 FORCE_ENV=true bash scripts/install-vm.sh
 SKIP_DOCKER_INSTALL=true bash scripts/install-vm.sh
 INSTALL_WIZARD=true bash scripts/install-vm.sh
+INSTALL_STATD=false bash scripts/install-vm.sh
+STATD_INSTALL_MODE=source STATD_REF=<tag-or-commit> bash scripts/install-vm.sh
 WIZARD_PUBLIC_TUNNEL=false INSTALL_WIZARD=true bash scripts/install-vm.sh
 bash scripts/install-vm.sh --podman
 bash scripts/install-vm.sh --migrate-url <migration-url>
 ```
+
+`REMOVE_STATD=false bash scripts/uninstall-vm.sh` preserves a separately managed statd installation; the destructive uninstaller removes installer-managed statd by default.
 
 ---
 
@@ -571,7 +581,7 @@ make verify-prod
 make help
 ```
 
-Pull requests are checked by GitHub Actions with backend tests, frontend unit/type/build checks, Bash syntax, all `scripts/*_test.py` regressions, and production Compose rendering.
+Pull requests are checked by GitHub Actions with backend tests, Go race detection, frontend unit/type/build checks, Bash syntax, all `scripts/*_test.py` regressions, benchmark-harness unit tests, production Compose rendering, and a Docker/Podman compatibility smoke for routing/runtime command contracts.
 
 ---
 
@@ -588,6 +598,7 @@ MyPaas/
 │   ├── migrations/             PostgreSQL schema migrations
 │   └── query/                  sqlc queries
 ├── frontend/                   SvelteKit dashboard
+├── benchmarks/                 evidence harnesses for current hot paths
 ├── docs/                       PRD, architecture, ADRs, and audits
 ├── scripts/                    bootstrap, install, deploy, verify, update, migration tooling
 ├── docker-compose.dev.yml      local dependencies
@@ -619,7 +630,9 @@ ENCRYPTION_KEY=your_base64_encoded_32byte_key
 # Docker-compatible engine contract
 DOCKER_SOCKET=/var/run/docker.sock
 DOCKER_BIND_HOST=0.0.0.0
+CONTROL_NETWORK=mypaas-control
 PROJECT_NETWORK=mypaas-dev
+ROUTING_NETWORK=mypaas-routing
 
 # Cloudflare Tunnel
 CLOUDFLARE_TUNNEL_TOKEN=your_tunnel_token
@@ -648,7 +661,9 @@ MyPaas deliberately remains smaller than a general-purpose cloud platform:
 - no supported in-place Docker Engine → Podman state migration;
 - built-in VM export rejects engine-managed Compose named/external volumes rather than silently copying them;
 - Nixpacks is an inspection aid, not an automatic backend/SSR buildpack deployment mode;
-- static deployments use redeploy/roll-forward instead of historical container rollback.
+- static deployments use redeploy/roll-forward instead of historical container rollback;
+- control-plane/workload/routing networks reduce control-plane adjacency but are not VM/microVM isolation between mutually hostile tenants;
+- the API's container-engine socket remains a host-authority trust boundary.
 
 These constraints are intentional unless a measured operational need justifies additional complexity.
 
@@ -658,6 +673,8 @@ These constraints are intentional unless a measured operational need justifies a
 
 - **[Product Requirements](docs/PRD.md)** — product scope and behavior.
 - **[Architecture](docs/ARCHITECTURE.md)** — technical design and diagrams.
+- **[Statd integration](docs/STATD.md)** — protocol, release, observability, and benchmark evidence.
+- **[Security boundaries](docs/SECURITY_BOUNDARIES.md)** — runtime/control-plane trust model.
 - **[Architecture Decisions](docs/adr/)** — recorded architectural decisions, including [ADR-019](docs/adr/ADR-019-migration-safety-boundaries.md).
 - **[Product direction](PRODUCT.md)** — user, purpose, and UI principles.
 - **[Engineering conventions](AGENTS.md)** — repository-wide constraints for agents/contributors.
@@ -691,7 +708,8 @@ Preserve, commit, or remove local changes before running bootstrap/update. Insta
 ```bash
 systemctl status podman.socket --no-pager
 readlink -f /var/run/docker.sock
-docker info
+docker version
+docker compose version
 ```
 
 On a Podman host, `/var/run/docker.sock` should resolve to the Podman API socket configured by the installer.
@@ -702,7 +720,7 @@ The exporter intentionally stops before downtime. Move the listed persistent vol
 
 ### Project domain does not resolve
 
-Verify Cloudflare Tunnel public-hostname routes plus proxied root and wildcard DNS records.
+Verify Cloudflare Tunnel public-hostname routes plus proxied root and wildcard DNS records, then run `scripts/verify-production.sh` to validate local routing/control-plane state.
 
 ### Production verification fails
 
@@ -736,4 +754,4 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
-**Implementation audit:** 2026-08-10
+**Implementation audit:** 2026-08-11
