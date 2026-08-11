@@ -106,6 +106,13 @@ fi
 echo "Checking API health..."
 curl -fsS http://127.0.0.1:8080/health >/dev/null
 curl -fsS http://127.0.0.1:8080/ready >/dev/null
+if [[ "${ENABLE_METRICS:-false}" == "true" ]]; then
+  if [[ -z "${METRICS_USERNAME:-}" || -z "${METRICS_PASSWORD:-}" ]]; then
+    echo "ENABLE_METRICS=true requires METRICS_USERNAME and METRICS_PASSWORD." >&2
+    exit 1
+  fi
+  curl -fsS -u "$METRICS_USERNAME:$METRICS_PASSWORD" http://127.0.0.1:8080/metrics >/dev/null
+fi
 
 echo "Checking Caddy Admin Unix socket..."
 if [[ ! -S "$CADDY_ADMIN_SOCKET" ]]; then

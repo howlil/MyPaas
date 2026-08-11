@@ -104,6 +104,14 @@ class InstallConfigTest(unittest.TestCase):
         self.assertNotIn("${CADDY_UPSTREAM_HOST:-${", compose)
         self.assertNotIn("host.docker.internal:host-gateway", compose)
 
+    def test_production_compose_passes_metrics_credentials_to_api(self) -> None:
+        compose = (ROOT_DIR / "docker-compose.prod.yml").read_text(encoding="utf-8")
+        api = compose.split("  api:\n", 1)[1].split("\n  dashboard:\n", 1)[0]
+
+        self.assertIn("ENABLE_METRICS: ${ENABLE_METRICS:-true}", api)
+        self.assertIn("METRICS_USERNAME: ${METRICS_USERNAME:-}", api)
+        self.assertIn("METRICS_PASSWORD: ${METRICS_PASSWORD:-}", api)
+
     def test_production_compose_separates_control_project_and_routing_networks(self) -> None:
         compose = (ROOT_DIR / "docker-compose.prod.yml").read_text(encoding="utf-8")
         postgres = compose.split("  postgres:\n", 1)[1].split("\n  api:\n", 1)[0]
