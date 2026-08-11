@@ -27,6 +27,14 @@ func TestProjectEngineVolumesReturnsOnlyMyPaasComposeVolumes(t *testing.T) {
     "Mounts": [{"Type": "volume", "Name": "mypaas_postgres_data"}]
   },
   {
+    "Config": {"Labels": {"com.docker.compose.project": "mypaas-pr32", "com.docker.compose.service": "postgres"}},
+    "Mounts": [{"Type": "volume", "Name": "mypaas-pr32_postgres_data"}]
+  },
+  {
+    "Config": {"Labels": {"com.docker.compose.project": "mypaas-pr32", "com.docker.compose.service": "caddy"}},
+    "Mounts": [{"Type": "volume", "Name": "mypaas-pr32_caddy_data"}]
+  },
+  {
     "Config": {"Labels": {}},
     "Mounts": [{"Type": "volume", "Name": "unrelated"}]
   }

@@ -69,6 +69,9 @@ func projectEngineVolumes(raw []byte) ([]string, error) {
 		if !strings.HasPrefix(project, "mypaas-") {
 			continue
 		}
+		if isPlatformComposeService(item.Config.Labels) {
+			continue
+		}
 		for _, mount := range item.Mounts {
 			if mount.Type != "volume" {
 				continue
@@ -86,4 +89,13 @@ func projectEngineVolumes(raw []byte) ([]string, error) {
 	}
 	sort.Strings(volumes)
 	return volumes, nil
+}
+
+func isPlatformComposeService(labels map[string]string) bool {
+	switch strings.TrimSpace(labels["com.docker.compose.service"]) {
+	case "api", "caddy", "cloudflared", "dashboard", "postgres":
+		return true
+	default:
+		return false
+	}
 }
