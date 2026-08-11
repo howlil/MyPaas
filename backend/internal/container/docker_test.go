@@ -145,18 +145,47 @@ func TestComposeUpFilesSupportsLegacySingleFileCallers(t *testing.T) {
 	}
 }
 
-func TestIsMypaasInternalEnvFiltersLeakyComposeVars(t *testing.T) {
-	for _, key := range []string{"DATABASE_URL", "POSTGRES_PASSWORD", "JWT_SECRET", "CADDY_ADMIN"} {
+func TestComposeEnvUsesFailClosedAllowlist(t *testing.T) {
+	input := []string{
+		"PATH=/usr/bin:/bin",
+		"HOME=/home/mypaas",
+		"DOCKER_HOST=unix:///var/run/docker.sock",
+		"XDG_RUNTIME_DIR=/run/user/1000",
+		"LC_ALL=C.UTF-8",
+		"HTTP_PROXY=http://proxy.internal:8080",
+		"JWT_SECRET=do-not-leak",
+		"GITHUB_TOKEN=do-not-leak",
+		"AWS_SECRET_ACCESS_KEY=do-not-leak",
+		"DATABASE_URL=postgres://control-plane",
+		"SOME_FUTURE_CONTROL_SECRET=do-not-leak",
+	}
+
+	got := filterComposeEnv(input)
+	joined := strings.Join(got, "\n")
+	for _, wanted := range []string{"PATH=", "HOME=", "DOCKER_HOST=", "XDG_RUNTIME_DIR=", "LC_ALL=", "HTTP_PROXY="} {
+		if !strings.Contains(joined, wanted) {
+			t.Fatalf("filterComposeEnv() dropped required host env %q: %v", wanted, got)
+		}
+	}
+	for _, forbidden := range []string{"JWT_SECRET=", "GITHUB_TOKEN=", "AWS_SECRET_ACCESS_KEY=", "DATABASE_URL=", "SOME_FUTURE_CONTROL_SECRET="} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("filterComposeEnv() leaked forbidden env %q: %v", forbidden, got)
+		}
+	}
+}
+
+func TestComposeHostEnvAllowlistIsMinimalAndCaseInsensitive(t *testing.T) {
+	for _, key := range []string{"PATH", "path", "DOCKER_HOST", "lc_time", "SystemRoot", "HTTPS_PROXY"} {
 		t.Run(key, func(t *testing.T) {
-			if !isMypaasInternalEnv(key) {
-				t.Fatalf("isMypaasInternalEnv(%q) = false, want true", key)
+			if !isComposeHostEnvAllowed(key) {
+				t.Fatalf("isComposeHostEnvAllowed(%q) = false, want true", key)
 			}
 		})
 	}
-	for _, key := range []string{"PATH", "SystemRoot", "DOCKER_HOST"} {
+	for _, key := range []string{"JWT_SECRET", "GITHUB_CLIENT_SECRET", "CLOUDFLARE_TUNNEL_TOKEN", "ROUTING_NETWORK", "AWS_SESSION_TOKEN"} {
 		t.Run(key, func(t *testing.T) {
-			if isMypaasInternalEnv(key) {
-				t.Fatalf("isMypaasInternalEnv(%q) = true, want false", key)
+			if isComposeHostEnvAllowed(key) {
+				t.Fatalf("isComposeHostEnvAllowed(%q) = true, want false", key)
 			}
 		})
 	}

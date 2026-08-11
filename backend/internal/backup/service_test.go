@@ -70,6 +70,20 @@ func TestApplyRetentionKeepsNewestMatchingFiles(t *testing.T) {
 	assertExists(t, filepath.Join(dir, "mypaas-weekly-old.dump"))
 }
 
+func TestApplyRetentionAllowsKeepLargerThanMatchingFiles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mypaas-daily-only.dump")
+	if err := os.WriteFile(path, []byte("backup"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := applyRetention(dir, dailyPrefix, 7); err != nil {
+		t.Fatalf("applyRetention() error = %v", err)
+	}
+
+	assertExists(t, path)
+}
+
 func TestPGDumpEnvUsesPGVariables(t *testing.T) {
 	env, err := pgDumpEnv("postgres://user:secret@localhost:15432/mypaas?sslmode=require", []string{"PATH=/bin"})
 	if err != nil {

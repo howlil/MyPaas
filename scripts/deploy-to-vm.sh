@@ -11,7 +11,6 @@ cleanup_advice() {
 }
 trap cleanup_advice ERR
 
-
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-.env}"
@@ -58,7 +57,16 @@ do
   $SUDO mkdir -p "$dir"
 done
 
-$DOCKER_BIN network inspect "${PROJECT_NETWORK:-mypaas-prod}" >/dev/null 2>&1 || $DOCKER_BIN network create "${PROJECT_NETWORK:-mypaas-prod}" >/dev/null
+CONTROL_NETWORK="${CONTROL_NETWORK:-mypaas-control}"
+PROJECT_NETWORK="${PROJECT_NETWORK:-mypaas-projects}"
+ROUTING_NETWORK="${ROUTING_NETWORK:-mypaas-routing}"
+if [[ "$CONTROL_NETWORK" == "$PROJECT_NETWORK" || "$CONTROL_NETWORK" == "$ROUTING_NETWORK" || "$PROJECT_NETWORK" == "$ROUTING_NETWORK" ]]; then
+  echo "CONTROL_NETWORK, PROJECT_NETWORK, and ROUTING_NETWORK must be distinct." >&2
+  exit 1
+fi
+for network in "$CONTROL_NETWORK" "$PROJECT_NETWORK" "$ROUTING_NETWORK"; do
+  $DOCKER_BIN network inspect "$network" >/dev/null 2>&1 || $DOCKER_BIN network create "$network" >/dev/null
+done
 
 echo "Starting PostgreSQL..."
 $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d postgres
@@ -72,7 +80,7 @@ MIGRATE_DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:
 
 echo "Running migrations..."
 $DOCKER_BIN run --rm \
-  --network "${PROJECT_NETWORK:-mypaas-prod}" \
+  --network "$CONTROL_NETWORK" \
   -v "$ROOT_DIR/backend/migrations:/migrations:ro" \
   migrate/migrate:latest \
   -path=/migrations \

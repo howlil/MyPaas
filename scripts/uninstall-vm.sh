@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env}"
+REMOVE_STATD="${REMOVE_STATD:-true}"
+STATD_DIR="${STATD_DIR:-/opt/mypaas-statd}"
 
 log() {
   printf '\n==> %s\n' "$*"
@@ -24,7 +26,7 @@ sudo_cmd() {
 
 echo "WARNING: This will completely destroy the MyPaas installation on this VM."
 echo "All projects, databases, configurations, and backups will be PERMANENTLY DELETED."
-read -p "Are you sure you want to continue? Type 'DESTROY' to confirm: " confirm
+read -r -p "Are you sure you want to continue? Type 'DESTROY' to confirm: " confirm
 
 if [[ "$confirm" != "DESTROY" ]]; then
   echo "Aborted."
@@ -35,11 +37,14 @@ cd "$ROOT_DIR"
 
 if [[ -f "$ENV_FILE" ]]; then
   set -a
+  # shellcheck disable=SC1090
   source "$ENV_FILE"
   set +a
 fi
 
-PROJECT_NETWORK="${PROJECT_NETWORK:-mypaas-prod}"
+CONTROL_NETWORK="${CONTROL_NETWORK:-mypaas-control}"
+PROJECT_NETWORK="${PROJECT_NETWORK:-mypaas-projects}"
+ROUTING_NETWORK="${ROUTING_NETWORK:-mypaas-routing}"
 
 docker_prefix() {
   if docker ps >/dev/null 2>&1; then
@@ -65,15 +70,48 @@ if [[ -f "$COMPOSE_FILE" ]]; then
   fi
 fi
 
-log "Stopping and removing all user project containers in network $PROJECT_NETWORK..."
-if $DOCKER_BIN network inspect "$PROJECT_NETWORK" >/dev/null 2>&1; then
-  containers=$($DOCKER_BIN network inspect "$PROJECT_NETWORK" --format '{{range .Containers}}{{.Name}} {{end}}' | xargs)
+remove_owned_network() {
+  local network="$1"
+  if ! $DOCKER_BIN network inspect "$network" >/dev/null 2>&1; then
+    return
+  fi
+
+  local containers
+  containers="$($DOCKER_BIN ps -aq --filter "network=$network" | xargs)"
   if [[ -n "$containers" ]]; then
-    log "Removing containers: $containers"
+    log "Removing containers attached to $network: $containers"
+    # shellcheck disable=SC2086
     $DOCKER_BIN rm -f $containers || true
   fi
-  log "Removing docker network $PROJECT_NETWORK..."
-  $DOCKER_BIN network rm "$PROJECT_NETWORK" || true
+
+  log "Removing Docker-compatible network $network..."
+  $DOCKER_BIN network rm "$network" || true
+}
+
+log "Removing MyPaas workload and platform networks..."
+# Remove the routing network first, then project and control. Any workload that
+# is dual-homed on project+routing is removed once and disappears from the
+# subsequent network query.
+for network in "$ROUTING_NETWORK" "$PROJECT_NETWORK" "$CONTROL_NETWORK"; do
+  remove_owned_network "$network"
+done
+
+if [[ "$REMOVE_STATD" == "true" ]]; then
+  log "Removing mypaas-statd host service..."
+  if command -v systemctl >/dev/null 2>&1; then
+    sudo_cmd systemctl disable --now mypaas-statd >/dev/null 2>&1 || true
+  fi
+  sudo_cmd rm -f /etc/systemd/system/mypaas-statd.service
+  sudo_cmd rm -f /usr/local/bin/mypaas-statd
+  if command -v systemctl >/dev/null 2>&1; then
+    sudo_cmd systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+  if [[ -d "$STATD_DIR" ]]; then
+    sudo_cmd rm -rf "$STATD_DIR"
+  fi
+  sudo_cmd rm -rf /run/mypaas
+else
+  log "Keeping mypaas-statd because REMOVE_STATD=false"
 fi
 
 log "Removing host directories..."
@@ -93,10 +131,9 @@ fi
 
 log "Uninstall complete. MyPaas has been totally destroyed."
 
-# Change directory before deleting the source folder to prevent errors
+# Change directory before deleting the source folder to prevent errors.
 cd /
 if [[ -d "$ROOT_DIR" && "$ROOT_DIR" != "/" ]]; then
   echo "==> Removing MyPaas source folder ($ROOT_DIR)..."
   sudo_cmd rm -rf "$ROOT_DIR"
 fi
-

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -18,26 +19,48 @@ type Client struct {
 }
 
 func NewClient(adminAddress, upstreamHost string) *Client {
-	adminAddress = strings.TrimPrefix(adminAddress, "http://")
+	adminAddress = strings.TrimSpace(adminAddress)
 	if upstreamHost == "" {
 		upstreamHost = "127.0.0.1"
 	}
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	baseURL := ""
+	if strings.HasPrefix(adminAddress, "unix/") {
+		socketPath := strings.TrimPrefix(adminAddress, "unix/")
+		transport := &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				dialer := net.Dialer{}
+				return dialer.DialContext(ctx, "unix", socketPath)
+			},
+		}
+		httpClient.Transport = transport
+		// HTTP still frames requests over the Unix stream; this host is only a
+		// local request URL placeholder and is never resolved on the network.
+		baseURL = "http://caddy-admin"
+	} else {
+		adminAddress = strings.TrimPrefix(adminAddress, "http://")
+		baseURL = "http://" + adminAddress
+	}
+
 	return &Client{
-		baseURL:      "http://" + adminAddress,
+		baseURL:      baseURL,
 		upstreamHost: upstreamHost,
-		http: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		http:         httpClient,
 	}
 }
 
 func (c *Client) AddRoute(ctx context.Context, host string, port int32) error {
+	dial, err := c.upstreamDial(ctx, port)
+	if err != nil {
+		return err
+	}
 	route, err := json.Marshal(map[string]any{
 		"match": []map[string]any{{"host": []string{host}}},
 		"handle": []map[string]any{{
 			"handler": "reverse_proxy",
 			"upstreams": []map[string]any{{
-				"dial": fmt.Sprintf("%s:%d", c.upstreamHost, port),
+				"dial": dial,
 			}},
 			"load_balancing": map[string]any{
 				"try_duration": "10s",
@@ -71,6 +94,10 @@ func (c *Client) AddFileServerRoute(ctx context.Context, host, root string) erro
 }
 
 func (c *Client) AddHybridRoute(ctx context.Context, host, root string, port int32) error {
+	dial, err := c.upstreamDial(ctx, port)
+	if err != nil {
+		return err
+	}
 	route, err := json.Marshal(map[string]any{
 		"match": []map[string]any{{"host": []string{host}}},
 		"handle": []map[string]any{
@@ -82,7 +109,7 @@ func (c *Client) AddHybridRoute(ctx context.Context, host, root string, port int
 						"handle": []map[string]any{{
 							"handler": "reverse_proxy",
 							"upstreams": []map[string]any{{
-								"dial": fmt.Sprintf("%s:%d", c.upstreamHost, port),
+								"dial": dial,
 							}},
 						}},
 					},
@@ -93,7 +120,7 @@ func (c *Client) AddHybridRoute(ctx context.Context, host, root string, port int
 								"root":    root,
 							},
 							{
-								"handler": "file_server",
+								"handler":     "file_server",
 								"index_names": []string{"index.html"},
 							},
 						},

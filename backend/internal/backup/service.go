@@ -223,6 +223,9 @@ func applyRetention(dir, prefix string, keep int) error {
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].modTime.After(files[j].modTime)
 	})
+	if keep >= len(files) {
+		return nil
+	}
 	for _, file := range files[keep:] {
 		if err := os.Remove(filepath.Join(dir, file.name)); err != nil {
 			return fmt.Errorf("remove old backup %s: %w", file.name, err)

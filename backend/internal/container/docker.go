@@ -916,11 +916,14 @@ func firstString(values []string) string {
 }
 
 func composeEnv() []string {
-	base := dockerEnv()
+	return filterComposeEnv(dockerEnv())
+}
+
+func filterComposeEnv(base []string) []string {
 	out := make([]string, 0, len(base))
 	for _, item := range base {
 		key, _, ok := strings.Cut(item, "=")
-		if ok && isMypaasInternalEnv(key) {
+		if !ok || !isComposeHostEnvAllowed(key) {
 			continue
 		}
 		out = append(out, item)
@@ -928,55 +931,53 @@ func composeEnv() []string {
 	return out
 }
 
-func isMypaasInternalEnv(key string) bool {
+// isComposeHostEnvAllowed intentionally uses an allowlist. Repository Compose
+// evaluation already receives project variables through --env-file; it should
+// not inherit arbitrary credentials from the MyPaaS API process merely because
+// a new control-plane integration adds another environment variable later.
+func isComposeHostEnvAllowed(key string) bool {
 	key = strings.ToUpper(strings.TrimSpace(key))
-	if strings.HasPrefix(key, "GITHUB_") || strings.HasPrefix(key, "CLOUDFLARE_") || strings.HasPrefix(key, "CADDY_") {
+	if strings.HasPrefix(key, "LC_") {
 		return true
 	}
 	switch key {
-	case "DATABASE_URL",
-		"POSTGRES_USER",
-		"POSTGRES_PASSWORD",
-		"POSTGRES_DB",
-		"ENVIRONMENT",
-		"API_HOST",
-		"API_PORT",
-		"FRONTEND_URL",
-		"JWT_SECRET",
-		"ENCRYPTION_KEY",
-		"DOCKER_SOCKET",
-		"DOCKER_BIND_HOST",
-		"PROJECT_NETWORK",
-		"PUBLIC_DOMAIN",
-		"OWNER_EMAIL",
-		"USER_RAM_QUOTA_GB",
-		"USER_CPU_QUOTA",
-		"MAX_PROJECTS",
-		"PROJECT_DEFAULT_RAM_MB",
-		"PROJECT_DEFAULT_CPU",
-		"ENABLE_WEBHOOKS",
-		"ENABLE_METRICS",
-		"METRICS_USERNAME",
-		"METRICS_PASSWORD",
-		"MAX_CONCURRENT_DEPLOYS",
-		"BUILD_TIMEOUT_MINUTES",
-		"STATIC_ROOT",
-		"SHARED_POSTGRES_ENABLED",
-		"SHARED_POSTGRES_HOST",
-		"SHARED_POSTGRES_PORT",
-		"SHARED_POSTGRES_SSLMODE",
-		"BACKUP_ENABLED",
-		"BACKUP_DIR",
-		"BACKUP_DAILY_AT",
-		"BACKUP_TIMEOUT_MINUTES",
-		"BACKUP_KEEP_DAILY",
-		"BACKUP_KEEP_WEEKLY",
-		"BACKUP_WEEKLY_DAY",
-		"IMAGE_CLEANUP_ENABLED",
-		"IMAGE_CLEANUP_UNTIL",
-		"IMAGE_CLEANUP_WEEKDAY",
-		"LOG_LEVEL",
-		"LOG_FORMAT":
+	case "PATH",
+		"HOME",
+		"PWD",
+		"USER",
+		"LOGNAME",
+		"SHELL",
+		"TMPDIR",
+		"TMP",
+		"TEMP",
+		"LANG",
+		"LANGUAGE",
+		"TZ",
+		"TERM",
+		"DOCKER_HOST",
+		"DOCKER_CONTEXT",
+		"DOCKER_CONFIG",
+		"DOCKER_TLS_VERIFY",
+		"DOCKER_CERT_PATH",
+		"DOCKER_API_VERSION",
+		"XDG_RUNTIME_DIR",
+		"XDG_CONFIG_HOME",
+		"XDG_DATA_HOME",
+		"SSL_CERT_FILE",
+		"SSL_CERT_DIR",
+		"HTTP_PROXY",
+		"HTTPS_PROXY",
+		"NO_PROXY",
+		"ALL_PROXY",
+		"SYSTEMROOT",
+		"WINDIR",
+		"COMSPEC",
+		"PATHEXT",
+		"USERPROFILE",
+		"HOMEDRIVE",
+		"HOMEPATH",
+		"APPDATA",
+		"LOCALAPPDATA":
 		return true
 	default:
 		return false
