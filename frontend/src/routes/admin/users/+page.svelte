@@ -96,7 +96,7 @@
 </svelte:head>
 
 <div class="page-shell py-6">
-	<PageHeader title="User whitelist" description="Only listed users can sign in via GitHub OAuth.">
+	<PageHeader className="mb-5" title="User whitelist" description="Only listed users can sign in via GitHub OAuth.">
 		<svelte:fragment slot="actions">
 			<IconButton label="Refresh users" variant="brand" {loading} on:click={load}>
 				<RefreshCw class="h-4 w-4" aria-hidden="true" />

@@ -6,7 +6,16 @@ export default {
 	theme: {
 		extend: {
 			fontFamily: {
-				sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif']
+				sans: [
+					'Inter Variable',
+					'ui-sans-serif',
+					'system-ui',
+					'-apple-system',
+					'BlinkMacSystemFont',
+					'Segoe UI',
+					'sans-serif'
+				],
+				mono: ['IBM Plex Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace']
 			}
 		}
 	},

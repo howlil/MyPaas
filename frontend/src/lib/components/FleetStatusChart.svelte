@@ -68,7 +68,7 @@
 			</svg>
 			<div class="absolute inset-0 flex flex-col items-center justify-center text-center">
 				<span class="text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{total}</span>
-				<span class="text-[11px] text-gray-500 dark:text-gray-400">projects</span>
+				<span class="text-xs text-gray-500 dark:text-gray-400">projects</span>
 			</div>
 		</div>
 

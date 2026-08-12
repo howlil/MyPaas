@@ -2,23 +2,15 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import Breadcrumbs from '$components/Breadcrumbs.svelte';
 	import DeployControlPanel from '$components/DeployControlPanel.svelte';
 	import ErrorState from '$components/ErrorState.svelte';
 	import { api } from '$api';
+	import { clearShellContext, setShellContext } from '$stores/shell-context';
 	import { toast } from '$stores/toast';
 	import type { Project, ProjectStatus } from '$types';
 	import { projectHost, projectURL } from '$lib/utils/urls';
 
 	const terminalProjectStatuses = new Set<ProjectStatus>(['running', 'stopped', 'crashed', 'pending']);
-	const projectSections = [
-		{ label: 'Deployments', href: '/deployments' },
-		{ label: 'Logs', href: '/logs' },
-		{ label: 'Metrics', href: '/metrics' },
-		{ label: 'Environment', href: '/env' },
-		{ label: 'Database', href: '/database' },
-		{ label: 'Settings', href: '/settings' }
-	];
 
 	let project: Project | null = null;
 	let loading = true;
@@ -28,22 +20,9 @@
 	let stream: EventSource | null = null;
 	let lastStreamStatus: ProjectStatus | null = null;
 
-	$: base = `/projects/${$page.params.id}`;
-	$: pathname = normalizePath($page.url.pathname);
-	$: activeSection = projectSections.find((section) => pathname === `${base}${section.href}` || pathname.startsWith(`${base}${section.href}/`));
-	$: breadcrumbs = project
-		? [
-				{ label: 'Projects', href: '/projects' },
-				{ label: project.name, href: activeSection ? base : undefined },
-				...(activeSection ? [{ label: activeSection.label }] : [])
-			]
-		: [{ label: 'Projects', href: '/projects' }, { label: 'Project' }];
 	$: publicProjectHost = project ? projectHost(project.subdomain, $page.url.hostname) : '';
 	$: publicProjectURL = project ? projectURL(project.subdomain, $page.url.protocol, $page.url.hostname) : '';
-
-	function normalizePath(value: string) {
-		return value.length > 1 && value.endsWith('/') ? value.slice(0, -1) : value;
-	}
+	$: setShellContext(project ? { projectId: project.id, projectName: project.name } : {});
 
 	onMount(() => {
 		void loadProject();
@@ -52,6 +31,7 @@
 		return () => {
 			stream?.close();
 			stream = null;
+			clearShellContext();
 		};
 	});
 
@@ -149,8 +129,6 @@
 </script>
 
 <div class="page-shell py-5">
-	<Breadcrumbs items={breadcrumbs} />
-
 	{#if loading}
 		<div class="control-panel p-5">
 			<div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

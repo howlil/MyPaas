@@ -5,6 +5,7 @@
 	import ActionButton from './ActionButton.svelte';
 	import IconButton from './IconButton.svelte';
 	import { api } from '$api';
+	import { shellContext } from '$stores/shell-context';
 	import { theme } from '$stores/theme';
 	import type { User } from '$types';
 
@@ -31,26 +32,29 @@
 	let signingOut = false;
 
 	$: pathname = $page.url.pathname;
-	$: headerContext = resolveHeaderContext(pathname);
+	$: headerContext = resolveHeaderContext(pathname, $shellContext);
 	$: userLabel = user?.githubUsername ?? user?.email ?? 'Account';
 
-	function resolveHeaderContext(currentPath: string) {
+	function resolveHeaderContext(currentPath: string, context: { projectId?: string; projectName?: string }) {
 		if (currentPath === '/projects/new') {
-			return { root: 'Projects', rootHref: '/projects', current: 'New project' };
+			return { root: 'Projects', rootHref: '/projects', middle: null as { label: string; href: string } | null, current: 'New project' };
 		}
-		const projectMatch = currentPath.match(/^\/projects\/[^/]+(?:\/([^/]+))?/);
+		const projectMatch = currentPath.match(/^\/projects\/([^/]+)(?:\/([^/]+))?/);
 		if (projectMatch) {
-			const section = projectMatch[1];
+			const section = projectMatch[2] ? (projectSectionLabels[projectMatch[2]] ?? 'Project') : '';
+			const projectLabel = context.projectName ?? 'Project';
+			const projectHref = `/projects/${projectMatch[1]}`;
 			return {
 				root: 'Projects',
 				rootHref: '/projects',
-				current: section ? (projectSectionLabels[section] ?? 'Project') : 'Project'
+				middle: section ? { label: projectLabel, href: projectHref } : null,
+				current: section || projectLabel
 			};
 		}
-		if (currentPath.startsWith('/admin/users')) return { root: 'Users', rootHref: '/admin/users', current: '' };
-		if (currentPath.startsWith('/admin/audit-logs')) return { root: 'Audit', rootHref: '/admin/audit-logs', current: '' };
-		if (currentPath.startsWith('/admin/settings')) return { root: 'Settings', rootHref: '/admin/settings', current: '' };
-		return { root: 'Projects', rootHref: '/projects', current: '' };
+		if (currentPath.startsWith('/admin/users')) return { root: 'Users', rootHref: '/admin/users', middle: null, current: '' };
+		if (currentPath.startsWith('/admin/audit-logs')) return { root: 'Audit', rootHref: '/admin/audit-logs', middle: null, current: '' };
+		if (currentPath.startsWith('/admin/settings')) return { root: 'Settings', rootHref: '/admin/settings', middle: null, current: '' };
+		return { root: 'Projects', rootHref: '/projects', middle: null, current: '' };
 	}
 
 	function isActive(href: string) {
@@ -88,13 +92,19 @@
 				<Menu class="h-4 w-4" aria-hidden="true" />
 			</IconButton>
 			<nav class="flex min-w-0 items-center gap-1.5 text-sm" aria-label="Breadcrumb">
-				{#if headerContext.current}
-					<a href={headerContext.rootHref} class="truncate font-medium text-gray-500 hover:text-gray-950 dark:text-gray-400 dark:hover:text-white">{headerContext.root}</a>
-					<ChevronRight class="h-3.5 w-3.5 shrink-0 text-gray-300 dark:text-gray-700" aria-hidden="true" />
-					<span class="truncate font-semibold text-gray-950 dark:text-white" aria-current="page">{headerContext.current}</span>
-				{:else}
-					<span class="truncate font-semibold text-gray-950 dark:text-white" aria-current="page">{headerContext.root}</span>
-				{/if}
+				<h1 class="flex min-w-0 items-center gap-1.5 text-sm font-normal">
+					{#if headerContext.current}
+						<a href={headerContext.rootHref} class="truncate font-medium text-gray-500 hover:text-gray-950 dark:text-gray-400 dark:hover:text-white">{headerContext.root}</a>
+						<ChevronRight class="h-3.5 w-3.5 shrink-0 text-gray-300 dark:text-gray-700" aria-hidden="true" />
+						{#if headerContext.middle}
+							<a href={headerContext.middle.href} class="truncate font-medium text-gray-500 hover:text-gray-950 dark:text-gray-400 dark:hover:text-white">{headerContext.middle.label}</a>
+							<ChevronRight class="h-3.5 w-3.5 shrink-0 text-gray-300 dark:text-gray-700" aria-hidden="true" />
+						{/if}
+						<span class="truncate font-semibold text-gray-950 dark:text-white" aria-current="page">{headerContext.current}</span>
+					{:else}
+						<span class="truncate font-semibold text-gray-950 dark:text-white" aria-current="page">{headerContext.root}</span>
+					{/if}
+				</h1>
 			</nav>
 		</div>
 
