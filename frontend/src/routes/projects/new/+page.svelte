@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Check, CircleAlert, Copy, Folder, LoaderCircle, Upload, X } from '@lucide/svelte';
+	import { Check, ChevronDown, CircleAlert, Copy, Folder, LoaderCircle, Upload, X } from '@lucide/svelte';
 	import { onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -86,6 +86,7 @@
 	let submitting = false;
 	let detecting = false;
 	let inspectingRepo = false;
+	let repoInspectScheduled = false;
 	let error = '';
 	let detectError = '';
 	let detectMessage = '';
@@ -181,11 +182,19 @@
 		mainService: form.mainService,
 		appPort: form.appPort,
 		composeDisabledReason,
-		busy: submitting || detecting || inspectingRepo
+		busy: submitting || detecting || inspectingRepo || repoInspectScheduled
 	});
+	$: sourceHasValue = form.sourceType === 'git' ? Boolean(form.repoUrl.trim()) : Boolean(form.imageRef.trim());
+	$: displayCreationReadiness = !sourceHasValue
+		? {
+			ready: false,
+			state: 'Waiting for source' as const,
+			reason: form.sourceType === 'registry' ? 'Add a container image to begin.' : 'Add a repository URL to begin.'
+		}
+		: creationReadiness;
 	$: canSubmit = creationReadiness.ready;
-	$: createDisabledReason = form.sourceType === 'git' && !form.repoUrl.trim()
-		? 'Add a repository URL to begin.'
+	$: createDisabledReason = !sourceHasValue
+		? displayCreationReadiness.reason
 		: form.sourceType === 'git' && repoInspectError
 			? repoInspectError
 			: creationReadiness.reason;
@@ -194,12 +203,12 @@
 	$: orderedEnvRows = envDrafts
 		.map((draft, index) => ({ draft, index, required: requiredEnvKeySet.has(normalizeEnvKey(draft.key)) }))
 		.sort((a, b) => Number(b.required) - Number(a.required) || a.draft.key.localeCompare(b.draft.key));
-	$: sourceHasValue = form.sourceType === 'git' ? Boolean(form.repoUrl.trim()) : Boolean(form.imageRef.trim());
 	$: gitAnalysisSettled = form.sourceType === 'git'
 		&& repositoryInspectionCurrent
 		&& form.deployMode !== 'auto'
 		&& !detecting
 		&& !inspectingRepo
+		&& !repoInspectScheduled
 		&& !repoInspectError
 		&& !detectError;
 	$: showAnalysisTimeline = form.sourceType === 'git'
@@ -226,6 +235,20 @@
 				: form.sourceType === 'registry' || form.deployMode !== 'auto'
 					? 'port required'
 					: '';
+	$: deploymentChoiceHint = detecting
+		? 'Scanning runtime files and environment variables…'
+		: form.deployMode === 'auto'
+			? 'MyPaas will detect the runtime after repository validation.'
+			: deployModeManual
+				? `Manual selection · ${runtimeLabel}`
+				: `Detected automatically · ${runtimeLabel}`;
+	$: environmentScanSummary = detecting
+		? 'Scanning repository for environment variables…'
+		: form.sourceType === 'git' && form.deployMode !== 'auto' && !detectError
+			? envDrafts.length > 0
+				? `${envDrafts.length} environment variable${envDrafts.length === 1 ? '' : 's'} detected`
+				: 'Environment scan complete · no variables detected'
+			: '';
 	$: backendPromptParts = error.includes('AI Prompt:\n') ? error.split('AI Prompt:\n') : [];
 	$: submissionErrorMessage = backendPromptParts.length > 1 ? backendPromptParts[0].trim() : error;
 	$: handoffEnvKeys = Array.from(new Set([
@@ -249,16 +272,22 @@
 
 	function buildAnalysisSteps(): AnalysisStep[] {
 		if (form.sourceType !== 'git') return [];
+		const hasSource = Boolean(form.repoUrl.trim());
 		const nameMessage = projectNameValidationMessage(form.name);
+		const nameState: AnalysisStepState = !hasSource
+			? 'pending'
+			: !form.name.trim() && !projectNameTouched
+				? 'active'
+				: nameMessage
+					? (projectNameTouched || repositoryInspectionCurrent ? 'attention' : 'pending')
+					: 'complete';
 		const repositoryState: AnalysisStepState = repoInspectError
 			? 'error'
-			: inspectingRepo
+			: repoInspectScheduled || inspectingRepo
 				? 'active'
 				: repositoryInspectionCurrent
 					? 'complete'
-					: form.repoUrl.trim()
-						? 'pending'
-						: 'pending';
+					: 'pending';
 		const deploymentState: AnalysisStepState = detectError
 			? 'error'
 			: detecting
@@ -266,11 +295,18 @@
 				: form.deployMode !== 'auto'
 					? 'complete'
 					: repositoryInspectionCurrent
-						? 'pending'
+						? 'active'
 						: 'pending';
+		const environmentState: AnalysisStepState = detectError
+			? 'error'
+			: detecting
+				? 'active'
+				: form.deployMode !== 'auto'
+					? 'complete'
+					: 'pending';
 		const configurationState: AnalysisStepState = canSubmit
 			? 'complete'
-			: form.deployMode !== 'auto' && !detecting && !inspectingRepo
+			: form.deployMode !== 'auto' && !detecting && !inspectingRepo && !repoInspectScheduled
 				? 'attention'
 				: 'pending';
 
@@ -278,27 +314,59 @@
 			{
 				label: 'Source received',
 				detail: compactSourceLabel(form.repoUrl),
-				state: form.repoUrl.trim() ? 'complete' : 'pending'
+				state: hasSource ? 'complete' : 'pending'
 			},
 			{
 				label: 'Project name',
-				detail: nameMessage ? nameMessage : form.name,
-				state: nameMessage ? 'attention' : 'complete'
+				detail: !hasSource
+					? 'Generated automatically from repository'
+					: !form.name.trim() && !projectNameTouched
+						? 'Generating from repository name'
+						: nameMessage
+							? nameMessage
+							: projectNameTouched
+								? form.name
+								: `${form.name} · Auto-filled`,
+				state: nameState
 			},
 			{
 				label: 'Repository',
-				detail: repoInspectError || (repositoryInspectionCurrent ? repoInspectMessage || 'Repository validated' : 'Checking repository and branches'),
+				detail: repoInspectError
+					|| (repoInspectScheduled
+						? 'Starting repository inspection'
+						: inspectingRepo
+							? 'Checking repository and branches'
+							: repositoryInspectionCurrent
+								? repoInspectMessage || 'Repository validated'
+								: 'Waiting for repository inspection'),
 				state: repositoryState
 			},
 			{
 				label: 'Branch',
-				detail: form.branch || 'Waiting for repository',
-				state: form.branch && repositoryInspectionCurrent ? 'complete' : inspectingRepo ? 'pending' : form.branch ? 'complete' : 'pending'
+				detail: form.branch || (repoInspectScheduled || inspectingRepo ? 'Resolving default branch' : 'Waiting for repository'),
+				state: form.branch && repositoryInspectionCurrent ? 'complete' : 'pending'
 			},
 			{
 				label: 'Deployment',
-				detail: detectError || (form.deployMode !== 'auto' ? `${runtimeLabel}${runtimeDetail ? ` · ${runtimeDetail}` : ''}` : 'Detecting runtime and deployment defaults'),
+				detail: detectError || (detecting
+					? 'Detecting Dockerfile, Compose, static output, and runtime defaults'
+					: form.deployMode !== 'auto'
+						? `${runtimeLabel}${runtimeDetail ? ` · ${runtimeDetail}` : ''}`
+						: 'Waiting for repository validation'),
 				state: deploymentState
+			},
+			{
+				label: 'Environment',
+				detail: detectError
+					? 'Environment scan stopped with deployment analysis'
+					: detecting
+						? 'Scanning source for environment variables'
+						: form.deployMode !== 'auto'
+							? envDrafts.length > 0
+								? `${envDrafts.length} variable${envDrafts.length === 1 ? '' : 's'} detected`
+								: 'No environment variables detected'
+							: 'Waiting for deployment analysis',
+				state: environmentState
 			},
 			{
 				label: 'Configuration',
@@ -386,6 +454,7 @@
 	}
 
 	function applyDetectedMode(detected: DeployModeDetection) {
+		const manualMode = deployModeManual ? form.deployMode : null;
 		const manualPort = appPortSource === 'manual' ? form.appPort : '';
 		if (detected.branch) form.branch = detected.branch;
 		defaultBranch = detected.defaultBranch || defaultBranch;
@@ -395,22 +464,24 @@
 		composePlan = normalizeComposePlan(detected.composePlan);
 		composeCandidates = Array.isArray(detected.composeCandidates) ? detected.composeCandidates : [];
 		staticFrontendCandidates = Array.isArray(detected.staticFrontendCandidates) ? detected.staticFrontendCandidates : [];
-		chooseDeployMode(detected.deployMode, false);
-		if (detected.mainService) form.mainService = detected.mainService;
+		if (!manualMode) chooseDeployMode(detected.deployMode, false);
+		const effectiveMode = manualMode ?? detected.deployMode;
+		if (effectiveMode === 'compose' && detected.mainService && !form.mainService) form.mainService = detected.mainService;
+		if (effectiveMode !== 'compose') form.mainService = '';
 		if (staticFrontendCandidates.length > 0 && !form.staticFrontendPath) {
 			form.staticFrontendPath = staticFrontendCandidates[0];
 		}
 		if (detected.composeFile && !form.composeFilePath) form.composeFilePath = detected.composeFile;
-		if (detected.deployMode === 'static') {
+		if (effectiveMode === 'static') {
 			form.appPort = '80';
 			appPortSource = 'static';
-		} else if (detected.appPort > 0) {
+		} else if (detected.appPort > 0 && appPortSource !== 'manual') {
 			form.appPort = String(detected.appPort);
 			appPortSource = 'detected';
 		} else if (manualPort) {
 			form.appPort = manualPort;
 			appPortSource = 'manual';
-		} else {
+		} else if (!form.appPort) {
 			form.appPort = '';
 			appPortSource = 'unresolved';
 		}
@@ -486,6 +557,7 @@
 
 	function clearDetectedSourceState() {
 		repoInspectRequest += 1;
+		repoInspectScheduled = false;
 		error = '';
 		detectError = '';
 		detectMessage = '';
@@ -558,10 +630,15 @@
 
 	function scheduleRepositoryInspection() {
 		if (repoInspectTimer) clearTimeout(repoInspectTimer);
-		if (!form.repoUrl.trim()) return;
+		if (!form.repoUrl.trim()) {
+			repoInspectScheduled = false;
+			return;
+		}
+		repoInspectScheduled = true;
 		repoInspectTimer = setTimeout(() => {
+			repoInspectScheduled = false;
 			void inspectRepository().catch(() => undefined);
-		}, 700);
+		}, 350);
 	}
 
 	function handleBranchChange(event: Event) {
@@ -584,6 +661,7 @@
 	async function inspectRepository(showToast = false, force = false): Promise<RepoInspection | undefined> {
 		const repoUrl = form.repoUrl.trim();
 		if (!repoUrl) return undefined;
+		repoInspectScheduled = false;
 		if (repoInspectTimer) {
 			clearTimeout(repoInspectTimer);
 			repoInspectTimer = undefined;
@@ -612,12 +690,10 @@
 			repoInspectMessage = branchOptions.length === 1 ? '1 branch available' : `${branchOptions.length} branches available`;
 			lastRepoInspectKey = repositoryInspectionKey();
 			if (showToast) toast.success('Repository validated');
-			if (!deployModeManual) {
-				setTimeout(() => {
-					if (detecting || deployModeManual || lastRepoInspectKey !== repositoryInspectionKey()) return;
-					void handleDetectMode(false).catch(() => undefined);
-				}, 0);
-			}
+			setTimeout(() => {
+				if (detecting || lastRepoInspectKey !== repositoryInspectionKey()) return;
+				void handleDetectMode(false).catch(() => undefined);
+			}, 0);
 			return inspection;
 		} catch (err) {
 			if (requestId !== repoInspectRequest) return undefined;
@@ -862,7 +938,7 @@
 	}
 
 	async function handleSubmit() {
-		if (submitting || detecting || inspectingRepo) return;
+		if (submitting || detecting || inspectingRepo || repoInspectScheduled) return;
 		projectNameTouched = true;
 		if (projectNameValidationMessage(form.name)) return;
 		submitting = true;
@@ -916,8 +992,9 @@
 			toast.success('Project created');
 			await goto(`/projects/${project.id}`);
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Failed to create project';
-			toast.error(submissionErrorMessage || 'Failed to create project');
+			const message = err instanceof Error ? err.message : 'Failed to create project';
+			error = message;
+			toast.error(message);
 		} finally {
 			submitting = false;
 		}
@@ -1007,6 +1084,7 @@
 	onDestroy(() => {
 		if (handoffCopyTimer) clearTimeout(handoffCopyTimer);
 		if (repoInspectTimer) clearTimeout(repoInspectTimer);
+		repoInspectScheduled = false;
 	});
 </script>
 
@@ -1016,7 +1094,7 @@
 
 <div class="page-shell py-6">
 	<Breadcrumbs items={breadcrumbs} />
-	<div class="mx-auto max-w-4xl">
+	<div>
 		<PageHeader title="New project" description="Choose a source. MyPaas will detect the deployment setup and ask only for values it cannot infer." />
 
 		<form class="surface min-w-0 overflow-hidden" on:submit|preventDefault={handleSubmit}>
@@ -1065,15 +1143,15 @@
 								{#if nameError}
 									<p class="mt-1 text-xs text-red-600 dark:text-red-300">{nameError}</p>
 								{:else}
-									<p class="mt-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">{previewHost}</p>
+									<p class="mt-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">{projectNameTouched ? previewHost : `${previewHost} · auto-filled`}</p>
 								{/if}
 							</div>
 
 							{#if form.sourceType === 'git'}
 								<div>
 									<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="branch">Branch</label>
-									<select id="branch" value={form.branch} class="field w-full font-mono" disabled={inspectingRepo || (!branchOptions.length && !form.branch)} on:change={handleBranchChange}>
-										<option value="" disabled>{inspectingRepo ? 'Loading branches…' : 'Select branch'}</option>
+									<select id="branch" value={form.branch} class="field w-full font-mono" disabled={inspectingRepo || repoInspectScheduled || (!branchOptions.length && !form.branch)} on:change={handleBranchChange}>
+										<option value="" disabled>{inspectingRepo || repoInspectScheduled ? 'Loading branches…' : 'Select branch'}</option>
 										{#each branchOptions as branch}
 											<option value={branch}>{branch}{branch === defaultBranch ? ' (default)' : ''}</option>
 										{/each}
@@ -1081,6 +1159,16 @@
 									<p class="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Default branch is selected automatically.</p>
 								</div>
 							{/if}
+						</div>
+					{/if}
+
+					{#if form.sourceType === 'git' && sourceHasValue}
+						<div class="border-t border-gray-100 pt-5 dark:border-gray-800">
+							<SegmentedChoice label="Deployment type" value={form.deployMode} options={deployModeOptions} on:change={(event) => chooseDeployMode(event.detail as DeployModeChoice)} />
+							<div class="mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400" aria-live="polite">
+								{#if detecting}<LoaderCircle class="h-3.5 w-3.5 shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" />{/if}
+								<span>{deploymentChoiceHint}</span>
+							</div>
 						</div>
 					{/if}
 				</div>
@@ -1091,9 +1179,9 @@
 					<div class="mb-5 flex flex-wrap items-start justify-between gap-3">
 						<div>
 							<h2 class="text-sm font-semibold text-gray-950 dark:text-white">Preparing project</h2>
-							<p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Progress reflects repository inspection and deployment detection in real time.</p>
+							<p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Repository, runtime, and environment detection update here as each real operation runs.</p>
 						</div>
-						{#if !inspectingRepo && !detecting && (repoInspectError || detectError)}
+						{#if !inspectingRepo && !detecting && !repoInspectScheduled && (repoInspectError || detectError)}
 							<ActionButton variant="secondary" size="xs" type="button" on:click={reanalyzeSource}>Try again</ActionButton>
 						{/if}
 					</div>
@@ -1102,7 +1190,7 @@
 						{#each analysisSteps as step, index}
 							<div class="relative flex gap-3 pb-4 last:pb-0">
 								{#if index < analysisSteps.length - 1}
-									<span class="absolute left-[0.6875rem] top-6 h-[calc(100%-1rem)] w-px bg-gray-200 dark:bg-gray-800" aria-hidden="true"></span>
+									<span class={`absolute left-[0.6875rem] top-6 h-[calc(100%-1rem)] w-px ${step.state === 'complete' ? 'bg-brand-200 dark:bg-brand-800' : step.state === 'active' ? 'animate-pulse bg-brand-300 dark:bg-brand-700' : 'bg-gray-200 dark:bg-gray-800'}`} aria-hidden="true"></span>
 								{/if}
 								<span class={`relative z-10 mt-0.5 inline-flex h-[1.375rem] w-[1.375rem] shrink-0 items-center justify-center rounded-full border ${step.state === 'complete' ? 'border-brand-600 bg-brand-600 text-white dark:border-brand-400 dark:bg-brand-400 dark:text-gray-950' : step.state === 'active' ? 'border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-700 dark:bg-brand-950/30 dark:text-brand-300' : step.state === 'error' ? 'border-red-300 bg-red-50 text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300' : step.state === 'attention' ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200' : 'border-gray-200 bg-white text-gray-400 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-600'}`}>
 									{#if step.state === 'complete'}
@@ -1146,10 +1234,10 @@
 									<h2 class="text-sm font-semibold text-gray-950 dark:text-white">Deployment setup</h2>
 									<span class={`rounded-full px-2 py-0.5 text-[11px] font-medium ${canSubmit ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200'}`}>{canSubmit ? 'Ready' : 'Needs configuration'}</span>
 								</div>
-								<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">The detected outcome is summarized here; implementation details stay in Advanced.</p>
+								<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Detected deployment and environment results are summarized here. Low-level overrides stay in Advanced settings.</p>
 							</div>
 							{#if form.sourceType === 'git'}
-								<ActionButton variant="secondary" size="xs" type="button" on:click={reanalyzeSource} disabled={inspectingRepo || detecting} loading={inspectingRepo || detecting} loadingLabel="Analyzing...">Re-analyze</ActionButton>
+								<ActionButton variant="secondary" size="xs" type="button" on:click={reanalyzeSource} disabled={inspectingRepo || detecting || repoInspectScheduled} loading={inspectingRepo || detecting || repoInspectScheduled} loadingLabel="Analyzing...">Re-analyze</ActionButton>
 							{/if}
 						</div>
 
@@ -1172,7 +1260,7 @@
 							<div class="bg-white px-4 py-3 dark:bg-gray-950">
 								<p class="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Environment</p>
 								<p class="mt-1 text-sm font-medium text-gray-950 dark:text-white">{envDrafts.length + (managedDatabaseUrl ? 1 : 0)} variable{envDrafts.length + (managedDatabaseUrl ? 1 : 0) === 1 ? '' : 's'}</p>
-								<p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{missingRequiredEnvKeys.length > 0 ? `${missingRequiredEnvKeys.length} required value${missingRequiredEnvKeys.length === 1 ? '' : 's'} missing` : 'No required values missing'}</p>
+								<p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">{missingRequiredEnvKeys.length > 0 ? `${missingRequiredEnvKeys.length} required value${missingRequiredEnvKeys.length === 1 ? '' : 's'} missing` : 'Scan complete · no required values missing'}</p>
 							</div>
 						</div>
 
@@ -1216,7 +1304,7 @@
 				<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
 					<div>
 						<h2 class="text-sm font-semibold text-gray-950 dark:text-white">Environment</h2>
-						<p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Required values are shown first. Optional variables stay out of the way.</p>
+						<p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Detected from the repository automatically. Required values are shown first.</p>
 					</div>
 					<div>
 						<input bind:this={envFileInput} type="file" accept=".env,text/plain" class="hidden" on:change={handleEnvFileImport} />
@@ -1225,6 +1313,17 @@
 						</ActionButton>
 					</div>
 				</div>
+
+				{#if environmentScanSummary}
+					<div class="mb-4 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400" aria-live="polite">
+						{#if detecting}
+							<LoaderCircle class="h-4 w-4 shrink-0 animate-spin text-brand-600 motion-reduce:animate-none dark:text-brand-400" aria-hidden="true" />
+						{:else}
+							<Check class="h-4 w-4 shrink-0 text-brand-600 dark:text-brand-400" aria-hidden="true" />
+						{/if}
+						<span>{environmentScanSummary}</span>
+					</div>
+				{/if}
 
 				{#if form.deployMode !== 'static'}
 					<div class="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-4 dark:border-gray-800">
@@ -1288,6 +1387,11 @@
 							</div>
 						{/each}
 					</div>
+				{:else if detecting}
+					<div class="flex items-center gap-2 py-3 text-sm text-gray-500 dark:text-gray-400">
+						<LoaderCircle class="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+						Scanning for environment variables…
+					</div>
 				{:else}
 					<p class="text-sm text-gray-500 dark:text-gray-400">No environment variables detected. Add one only if your application needs it.</p>
 				{/if}
@@ -1298,13 +1402,16 @@
 				</div>
 			</section>
 
-			<section class="border-t border-gray-100 dark:border-gray-800">
-				<details>
-					<summary class="app-focus flex cursor-pointer list-none items-center justify-between px-5 py-4 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-900/50 sm:px-6 [&::-webkit-details-marker]:hidden">
-						<span>Advanced</span>
-						<span class="text-xs font-normal text-gray-500 dark:text-gray-400">Overrides & diagnostics</span>
+			<section class="border-t border-gray-100 p-3 dark:border-gray-800 sm:p-4">
+				<details class="group rounded-md border border-gray-200 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-900/40">
+					<summary class="app-focus flex cursor-pointer list-none items-center justify-between gap-4 rounded-md px-4 py-3 text-left hover:bg-gray-100/70 dark:hover:bg-gray-900 sm:px-5 [&::-webkit-details-marker]:hidden">
+						<div class="min-w-0">
+							<span class="block text-sm font-semibold text-gray-900 dark:text-white">Advanced settings</span>
+							<span class="mt-0.5 block text-xs font-normal text-gray-500 dark:text-gray-400">Project directory, runtime overrides, resources, and diagnostics</span>
+						</div>
+						<ChevronDown class="h-4 w-4 shrink-0 text-gray-500 transition-transform group-open:rotate-180 dark:text-gray-400" aria-hidden="true" />
 					</summary>
-					<div class="space-y-7 border-t border-gray-100 px-5 py-5 dark:border-gray-800 sm:px-6">
+					<div class="space-y-7 border-t border-gray-100 bg-white px-5 py-5 dark:border-gray-800 dark:bg-gray-950 sm:px-6">
 						{#if form.sourceType === 'git'}
 							<div>
 								<div class="mb-3 flex items-center gap-1">
@@ -1341,25 +1448,20 @@
 
 						<div>
 							<div class="mb-3 flex items-center gap-1">
-								<h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Runtime</h3>
-								<InfoDisclosure id="runtime-override-info" label="About runtime overrides">Use these only when automatic detection is wrong or a registry image does not expose enough metadata.</InfoDisclosure>
+								<h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Runtime overrides</h3>
+								<InfoDisclosure id="runtime-override-info" label="About runtime overrides">Deployment type is selected in the normal flow above. Use these fields only when detected service or port details need correction.</InfoDisclosure>
 							</div>
-							<div class="grid gap-4">
-								{#if form.sourceType === 'git'}
-									<SegmentedChoice label="Deployment mode override" value={form.deployMode} options={deployModeOptions} on:change={(event) => chooseDeployMode(event.detail as DeployModeChoice)} />
+							<div class="grid gap-4 sm:grid-cols-2">
+								{#if form.deployMode === 'compose' && form.mainService}
+									<div><label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="mainServiceAdvanced">Public service override</label><input id="mainServiceAdvanced" type="text" bind:value={form.mainService} class="field w-full font-mono" /></div>
 								{/if}
-								<div class="grid gap-4 sm:grid-cols-2">
-									{#if form.deployMode === 'compose' && form.mainService}
-										<div><label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="mainServiceAdvanced">Public service override</label><input id="mainServiceAdvanced" type="text" bind:value={form.mainService} class="field w-full font-mono" /></div>
-									{/if}
-									{#if form.deployMode !== 'static' && form.appPort}
-										<div><label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="appPortAdvanced">Container port override</label><input id="appPortAdvanced" type="number" min="1" max="65535" value={form.appPort} on:input={handleAppPortInput} class="field w-full font-mono" /></div>
-									{/if}
-								</div>
-								{#if (form.deployMode === 'compose' || form.deployMode === 'dockerfile') && staticFrontendCandidates.length > 0}
-									<div class="max-w-md"><label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="staticFrontendPath">Static frontend override</label><select id="staticFrontendPath" bind:value={form.staticFrontendPath} class="field w-full"><option value="">Disabled</option>{#each staticFrontendCandidates as candidate}<option value={candidate}>{candidate}</option>{/each}</select></div>
+								{#if form.deployMode !== 'static' && form.appPort}
+									<div><label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="appPortAdvanced">Container port override</label><input id="appPortAdvanced" type="number" min="1" max="65535" value={form.appPort} on:input={handleAppPortInput} class="field w-full font-mono" /></div>
 								{/if}
 							</div>
+							{#if (form.deployMode === 'compose' || form.deployMode === 'dockerfile') && staticFrontendCandidates.length > 0}
+								<div class="mt-4 max-w-md"><label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="staticFrontendPath">Static frontend override</label><select id="staticFrontendPath" bind:value={form.staticFrontendPath} class="field w-full"><option value="">Disabled</option>{#each staticFrontendCandidates as candidate}<option value={candidate}>{candidate}</option>{/each}</select></div>
+							{/if}
 						</div>
 
 						{#if form.deployMode === 'compose'}
@@ -1424,7 +1526,7 @@
 					<div class="min-w-0" aria-live="polite">
 						<div class="flex items-center gap-2">
 							{#if canSubmit}<Check class="h-4 w-4 shrink-0 text-brand-600 dark:text-brand-400" aria-hidden="true" />{:else}<span class="h-2 w-2 shrink-0 rounded-full bg-gray-400 dark:bg-gray-600"></span>{/if}
-							<p class="text-sm font-medium text-gray-950 dark:text-white">{creationReadiness.state}</p>
+							<p class="text-sm font-medium text-gray-950 dark:text-white">{displayCreationReadiness.state}</p>
 						</div>
 						<p class="mt-1 truncate font-mono text-[11px] text-gray-500 dark:text-gray-400">{previewHost}</p>
 						{#if submissionErrorMessage}
