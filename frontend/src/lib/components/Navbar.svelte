@@ -53,13 +53,13 @@
 </script>
 
 <aside class="fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-gray-200 bg-white transition-[width] duration-200 dark:border-neutral-800 dark:bg-neutral-950 lg:flex {$sidebarCollapsed ? 'w-16' : 'w-64'}">
-	<div class="flex items-center border-b border-gray-200 dark:border-neutral-800 {$sidebarCollapsed ? 'h-20 flex-col justify-center gap-1 px-2' : 'h-16 justify-between gap-2.5 px-4'}">
+	<div class="flex items-center border-b border-gray-200 dark:border-neutral-800 {$sidebarCollapsed ? 'h-20 flex-col justify-center gap-1 px-2' : 'h-20 justify-between gap-2.5 px-5'}">
 		{#if $sidebarCollapsed}
 			<a href="/projects" class="flex items-center justify-center rounded-md p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-950 dark:focus-visible:ring-white">
-				<BrandLogo compact imageClass="h-7 w-7" />
+				<BrandLogo compact />
 			</a>
 		{:else}
-			<a href="/projects" class="flex min-w-0 items-center">
+			<a href="/projects" class="flex min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-950 dark:focus-visible:ring-white">
 				<BrandLogo />
 			</a>
 		{/if}
@@ -78,7 +78,7 @@
 
 	<nav class="flex-1 overflow-y-auto py-4 {$sidebarCollapsed ? 'px-2' : 'px-3'}" aria-label="Primary navigation">
 		{#if !$sidebarCollapsed}
-			<p class="px-3 pb-2 text-[11px] font-medium text-gray-400 dark:text-gray-500">Workspace</p>
+			<p class="px-3 pb-2 text-xs font-medium text-gray-400 dark:text-gray-500">Workspace</p>
 		{/if}
 		<div class="space-y-1">
 			{#each navItems as item}
@@ -132,7 +132,7 @@
 					<span class="min-w-0 flex-1">
 						<span class="block truncate text-sm font-medium text-gray-950 dark:text-white">{userLabel}</span>
 						{#if user?.email}
-							<span class="mt-0.5 block truncate text-[11px] text-gray-500 dark:text-gray-400">{user.email}</span>
+							<span class="mt-0.5 block truncate text-xs text-gray-500 dark:text-gray-400">{user.email}</span>
 						{/if}
 					</span>
 				</button>

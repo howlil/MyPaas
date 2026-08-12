@@ -74,7 +74,7 @@
 </svelte:head>
 
 <div class="page-shell py-6">
-	<PageHeader title="Audit logs" description="Recent authenticated changes across projects, deployments, env vars, and admin users.">
+	<PageHeader className="mb-5" title="Audit logs" description="Recent authenticated changes across projects, deployments, env vars, and admin users.">
 		<svelte:fragment slot="actions">
 			<IconButton label="Refresh audit logs" variant="brand" {loading} on:click={load}>
 				<RefreshCw class="h-4 w-4" aria-hidden="true" />

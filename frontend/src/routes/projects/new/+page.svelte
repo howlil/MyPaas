@@ -4,10 +4,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import ActionButton from '$components/ActionButton.svelte';
-	import Breadcrumbs from '$components/Breadcrumbs.svelte';
 	import IconButton from '$components/IconButton.svelte';
 	import InfoDisclosure from '$components/InfoDisclosure.svelte';
-	import PageHeader from '$components/PageHeader.svelte';
 	import SegmentedChoice from '$components/SegmentedChoice.svelte';
 	import { api } from '$api';
 	import { toast } from '$stores/toast';
@@ -65,10 +63,6 @@
 		'PUBLIC_ORIGIN',
 		'PUBLIC_URL'
 	]);
-	const breadcrumbs = [
-		{ label: 'Projects', href: '/projects' },
-		{ label: 'New project' }
-	];
 	const sourceTypeOptions = [
 		{ value: 'git', label: 'Git Repository', description: 'Clone & build' },
 		{ value: 'registry', label: 'Container Registry', description: 'Pull image' }
@@ -1160,10 +1154,7 @@
 </svelte:head>
 
 <div class="page-shell py-6">
-	<Breadcrumbs items={breadcrumbs} />
 	<div>
-		<PageHeader title="New project" description="Choose a source. MyPaas will detect the deployment setup and ask only for values it cannot infer." />
-
 		<form class="surface min-w-0 overflow-hidden" on:submit|preventDefault={handleSubmit}>
 			<section class="p-5 sm:p-6">
 				<div class="mb-5">

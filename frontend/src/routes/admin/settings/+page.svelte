@@ -170,7 +170,7 @@
 </svelte:head>
 
 <div class="page-shell py-6">
-	<PageHeader title="Platform Settings" description="Manage platform configurations and migrations" />
+	<PageHeader className="mb-5" title="Platform Settings" description="Manage platform configurations and migrations" />
 
 	<SectionPanel title="Resource Configuration" description="Configure default platform limits and resource quotas." className="mb-8">
 		{#if loadingSettings}

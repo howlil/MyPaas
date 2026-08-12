@@ -66,8 +66,8 @@
 		--chart-tick: #a3a3a3;
 	}
 	html {
-		font-size: 15px;
-		font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+		font-size: 16px;
+		font-family: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 		text-rendering: optimizeLegibility;
 		background: var(--app-bg);
 	}
@@ -94,17 +94,13 @@
 		margin-inline: auto;
 		padding-inline: clamp(0.875rem, 1.1vw, 1.5rem);
 	}
-	.page-shell > nav[aria-label='Breadcrumb'] {
-		display: none;
-	}
-	.page-shell > .mx-auto.max-w-4xl {
-		width: 100%;
-		max-width: none;
-		margin-inline: 0;
-	}
 	.scrollbar-thin {
 		scrollbar-width: thin;
 	}
+
+	/* ── Surfaces ────────────────────────────────────────────────
+	 * Normal product chrome is flat: 1px neutral border, 8px radius, no shadow.
+	 * Shadow is reserved for .overlay (menus, popovers, modals, toasts). */
 	.surface,
 	.control-panel {
 		border: 1px solid var(--app-border);
@@ -128,6 +124,8 @@
 		background: var(--app-surface);
 		box-shadow: 0 12px 28px rgb(0 0 0 / 0.14);
 	}
+
+	/* ── Fields ────────────────────────────────────────────────── */
 	.field {
 		border: 1px solid var(--app-border);
 		border-radius: 0.375rem;
@@ -139,6 +137,14 @@
 		border-color: var(--app-accent);
 		box-shadow: 0 0 0 1px var(--app-accent), 0 0 0 4px color-mix(in oklch, var(--app-accent-soft) 72%, transparent);
 	}
+	.field-label {
+		color: var(--app-muted);
+		@apply mb-1 block text-xs font-medium;
+	}
+	.field-hint {
+		color: var(--app-subtle);
+		@apply mt-1 text-xs;
+	}
 	.app-focus {
 		outline: none;
 	}
@@ -146,11 +152,97 @@
 		border-color: var(--app-accent);
 		box-shadow: 0 0 0 1px var(--app-accent), 0 0 0 4px color-mix(in oklch, var(--app-accent-soft) 72%, transparent);
 	}
+
+	/* ── Panels ────────────────────────────────────────────────── */
 	.panel-header {
 		border-bottom: 1px solid var(--app-border);
 		background: var(--app-surface);
-		@apply px-5 py-4;
+		@apply px-5 py-3;
 	}
+	.panel-title {
+		color: var(--app-ink);
+		@apply text-[0.9375rem] font-semibold tracking-tight;
+	}
+	.panel-description {
+		color: var(--app-subtle);
+		@apply mt-0.5 max-w-2xl text-xs;
+	}
+
+	/* ── Data tables ─────────────────────────────────────────────
+	 * One table grammar for the whole product: 12px medium headers,
+	 * 14px primary values, compact 52–60px rows. */
+	.data-table {
+		border-collapse: separate;
+		border-spacing: 0;
+		@apply min-w-full text-sm;
+	}
+	.data-table thead th {
+		border-bottom: 1px solid var(--app-border);
+		background: color-mix(in oklch, var(--app-surface-muted) 60%, var(--app-surface));
+		color: var(--app-subtle);
+		@apply px-4 py-2 text-left text-xs font-medium;
+	}
+	.data-table tbody {
+		@apply divide-y divide-gray-100 dark:divide-neutral-800;
+	}
+	.data-table tbody td {
+		color: var(--app-muted);
+		@apply px-4 py-2.5 align-middle;
+	}
+	.data-table tbody tr {
+		@apply transition-colors;
+	}
+	.data-table tbody tr:hover {
+		background: color-mix(in oklch, var(--app-surface-muted) 55%, var(--app-surface));
+	}
+
+	/* ── Chips ───────────────────────────────────────────────────
+	 * Restrained status chips: semantic dot + neutral text by default.
+	 * Tints are reserved for states that genuinely need emphasis. */
+	.chip {
+		border: 1px solid var(--app-border);
+		background: var(--app-surface-muted);
+		color: var(--app-muted);
+		@apply inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-medium leading-5;
+	}
+	.status-dot {
+		@apply inline-block h-1.5 w-1.5 shrink-0 rounded-full;
+	}
+
+	/* ── Inline alerts ───────────────────────────────────────────
+	 * Semantic banners; an alert tone is not a new elevation level. */
+	.alert {
+		@apply flex gap-3 rounded-md border px-4 py-3 text-sm;
+	}
+	.alert-warning {
+		@apply alert border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200;
+	}
+	.alert-danger {
+		@apply alert border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/25 dark:text-red-200;
+	}
+	.alert-info {
+		@apply alert border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-200;
+	}
+	.alert-neutral {
+		border-color: var(--app-border);
+		background: var(--app-surface-muted);
+		color: var(--app-muted);
+		@apply alert;
+	}
+
+	/* ── Code / technical surfaces ─────────────────────────────── */
+	.code-surface {
+		border: 1px solid var(--app-border);
+		background: var(--app-surface-muted);
+		color: var(--app-muted);
+		@apply block break-all rounded-md px-3 py-2 font-mono text-xs;
+	}
+	/* Dark terminal surface — allowed because the content is terminal output. */
+	.console-surface {
+		@apply overflow-hidden rounded-md border border-gray-800 bg-gray-950 font-mono text-xs leading-5 text-gray-100;
+	}
+
+	/* ── Metrics ───────────────────────────────────────────────── */
 	.metric-label {
 		color: var(--app-subtle);
 		@apply text-xs font-medium;
@@ -158,6 +250,7 @@
 	.metric-value {
 		font-variant-numeric: tabular-nums;
 	}
+
 	@media (prefers-reduced-motion: reduce) {
 		*,
 		*::before,

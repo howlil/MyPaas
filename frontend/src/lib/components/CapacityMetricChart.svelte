@@ -80,7 +80,7 @@
 				<span class={`h-1.5 w-1.5 rounded-full ${resourceClass.dot}`}></span>
 				<p class="metric-label truncate">{label}</p>
 			</div>
-			<p class="metric-value mt-1 truncate text-lg font-semibold tracking-tight text-gray-950 dark:text-white">{value}</p>
+			<p class="metric-value mt-1 truncate text-xl font-semibold tracking-tight text-gray-950 dark:text-white">{value}</p>
 		</div>
 		{#if effectiveIndicator}
 			<p class="metric-value shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-400">{effectiveIndicator}</p>
@@ -103,7 +103,7 @@
 		</svg>
 	</div>
 
-	<div class="mt-2 flex items-center justify-between gap-3 text-[11px] text-gray-500 dark:text-gray-400">
+	<div class="mt-2 flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
 		<p class="truncate">{detail}</p>
 		<span class="shrink-0 font-mono">{currentOnly ? 'current' : cleanSeries.length >= 2 ? rangeLabel : 'collecting'}</span>
 	</div>

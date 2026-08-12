@@ -24,7 +24,7 @@
 </script>
 
 <div
-	class="flex flex-col gap-3 border-t border-gray-100 bg-gray-50/70 px-5 py-3 text-sm dark:border-gray-800 dark:bg-gray-900/70 sm:flex-row sm:items-center sm:justify-between"
+	class="flex flex-col gap-2 border-t border-gray-100 bg-gray-50/70 px-4 py-2.5 text-sm dark:border-neutral-800 dark:bg-neutral-900/60 sm:flex-row sm:items-center sm:justify-between"
 	role="navigation"
 	aria-label={`${label} pagination`}
 >

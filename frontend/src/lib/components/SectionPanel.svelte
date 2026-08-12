@@ -10,13 +10,13 @@
 
 <section class={`surface min-w-0 overflow-hidden ${className}`.trim()}>
 	{#if title || description || $$slots.actions}
-		<div class="panel-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+		<div class="panel-header flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
 			<div class="min-w-0">
 				{#if title}
-					<h2 class="text-sm font-semibold text-gray-950 dark:text-white">{title}</h2>
+					<h2 class="panel-title">{title}</h2>
 				{/if}
 				{#if description}
-					<p class="mt-0.5 max-w-2xl text-xs text-gray-500 dark:text-gray-400">{description}</p>
+					<p class="panel-description">{description}</p>
 				{/if}
 			</div>
 			{#if $$slots.actions}

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import '@fontsource-variable/inter';
+	import '@fontsource/ibm-plex-mono/400.css';
+	import '@fontsource/ibm-plex-mono/500.css';
 	import '../app.css';
 	import AppHeader from '$components/AppHeader.svelte';
 	import Navbar from '$components/Navbar.svelte';
