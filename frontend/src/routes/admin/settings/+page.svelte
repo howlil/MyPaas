@@ -157,7 +157,7 @@
 </svelte:head>
 
 <div class="page-shell space-y-4 py-6">
-	<p class="text-sm text-gray-500 dark:text-gray-400">Platform limits, AI-agent access, and migration workflows for this MyPaaS instance.</p>
+	<p class="px-5 text-sm text-gray-500 dark:text-gray-400">Platform limits, AI-agent access, and migration workflows for this MyPaaS instance.</p>
 
 	<SectionPanel title="Resource configuration" description="Default platform limits and project resource quotas.">
 		<svelte:fragment slot="actions">
