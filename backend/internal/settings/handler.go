@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -16,14 +18,15 @@ import (
 	"mypaas/internal/statd"
 )
 
-// settingKeys lists the keys that can be overridden via the API.
+// settingKeys lists numeric settings that have an authoritative runtime
+// consumer. Project resource defaults intentionally live in resource profiles;
+// keeping a second admin-level default would create two competing sources of
+// truth for new-project configuration.
 var settingKeys = []string{
 	"user_ram_quota_gb",
 	"user_cpu_quota",
 	"max_projects",
 	"max_concurrent_deploys",
-	"project_default_ram_mb",
-	"project_default_cpu",
 	"build_timeout_minutes",
 }
 
@@ -73,7 +76,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RegenerateMCPToken(w http.ResponseWriter, r *http.Request) {
 	randBytes := make([]byte, 24)
-	rand.Read(randBytes)
+	_, _ = rand.Read(randBytes)
 	newToken := "mp_" + hex.EncodeToString(randBytes)
 
 	rawToken, _ := json.Marshal(newToken)
@@ -126,24 +129,20 @@ func (h *Handler) UpdateCloudflareConfig(w http.ResponseWriter, r *http.Request)
 	h.Get(w, r)
 }
 
-// Update upserts one or more platform settings and applies them to the
-// running config so changes take effect immediately.
+// Update upserts one or more platform settings and applies the supported
+// runtime values to the in-memory config.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	var req map[string]float64
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_BODY", "Request body must be a JSON object with numeric values.", nil)
 		return
 	}
-
-	allowed := make(map[string]struct{}, len(settingKeys))
-	for _, k := range settingKeys {
-		allowed[k] = struct{}{}
+	if err := validateSettings(req); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "INVALID_SETTING", err.Error(), nil)
+		return
 	}
 
 	for key, value := range req {
-		if _, ok := allowed[key]; !ok {
-			continue
-		}
 		raw, err := json.Marshal(value)
 		if err != nil {
 			httpx.Error(w, http.StatusBadRequest, "INVALID_VALUE", "Cannot encode value for "+key, nil)
@@ -158,11 +157,46 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Apply overrides to the in-memory config so they take effect immediately.
 	h.applyToConfig(req)
-
-	// Return the merged view so the frontend can confirm.
 	h.Get(w, r)
+}
+
+func validateSettings(values map[string]float64) error {
+	allowed := make(map[string]struct{}, len(settingKeys))
+	for _, key := range settingKeys {
+		allowed[key] = struct{}{}
+	}
+	for key, value := range values {
+		if _, ok := allowed[key]; !ok {
+			return fmt.Errorf("unknown platform setting %q", key)
+		}
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return fmt.Errorf("%s must be a finite number", key)
+		}
+		switch key {
+		case "user_ram_quota_gb":
+			if value <= 0 || value > 1024 {
+				return errors.New("user RAM quota must be greater than 0 and at most 1024 GB")
+			}
+		case "user_cpu_quota":
+			if value <= 0 || value > 256 {
+				return errors.New("user CPU quota must be greater than 0 and at most 256 cores")
+			}
+		case "max_projects":
+			if value < 1 || value > 10000 || value != math.Trunc(value) {
+				return errors.New("maximum projects must be a whole number between 1 and 10000")
+			}
+		case "max_concurrent_deploys":
+			if value < 1 || value > 32 || value != math.Trunc(value) {
+				return errors.New("concurrent deployments must be a whole number between 1 and 32")
+			}
+		case "build_timeout_minutes":
+			if value < 1 || value > 1440 || value != math.Trunc(value) {
+				return errors.New("build timeout must be a whole number between 1 and 1440 minutes")
+			}
+		}
+	}
+	return nil
 }
 
 type hostStatsResponse struct {
@@ -252,26 +286,11 @@ func (h *Handler) HostStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) defaults() map[string]float64 {
-	cap := host.GetCapacity()
-
-	// Smart defaults based on physical capacity
-	defaultUserRAM := float64(h.cfg.UserRAMQuotaMB) / 1024
-	defaultProjectRAM := float64(512)
-
-	// If VM has <= 2GB RAM (approx 2048 * 1024 * 1024 = 2147483648)
-	// Give max 1.5GB to user, default 256MB per project.
-	if cap.TotalRAMBytes > 0 && cap.TotalRAMBytes <= (2500*1024*1024) {
-		defaultUserRAM = 1.5
-		defaultProjectRAM = 256
-	}
-
 	return map[string]float64{
-		"user_ram_quota_gb":      defaultUserRAM,
+		"user_ram_quota_gb":      float64(h.cfg.UserRAMQuotaMB) / 1024,
 		"user_cpu_quota":         h.cfg.UserCPUQuota,
 		"max_projects":           float64(h.cfg.MaxProjects),
 		"max_concurrent_deploys": float64(h.cfg.MaxConcurrentDeploys),
-		"project_default_ram_mb": defaultProjectRAM,
-		"project_default_cpu":    0.5,
 		"build_timeout_minutes":  float64(h.cfg.BuildTimeoutMinutes),
 	}
 }
