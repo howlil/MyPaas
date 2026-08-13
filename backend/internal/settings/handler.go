@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -35,37 +36,31 @@ type Handler struct {
 }
 
 func NewHandler(queries *db.Queries, cfg *config.Config) *Handler {
-	return &Handler{queries: queries, cfg: cfg}
+	h := &Handler{queries: queries, cfg: cfg}
+	// The DB is the persisted source for owner-edited live settings. Rehydrate
+	// the shared config before the HTTP server starts accepting requests so a
+	// process restart cannot silently revert quota/build behavior to env values.
+	if rows, err := queries.GetAllSettings(context.Background()); err == nil {
+		h.applyStoredRows(rows)
+	}
+	return h
 }
 
-// Get returns the current platform settings merged from env defaults and DB
-// overrides. Only whitelisted keys are exposed.
+// Get returns the effective live platform settings. DB overrides are applied
+// to the same shared config before the response is produced so displayed and
+// enforced values cannot diverge.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queries.GetAllSettings(r.Context())
 	if err != nil {
 		httpx.DomainError(w, err)
 		return
 	}
+	h.applyStoredRows(rows)
 
-	overrides := make(map[string]json.RawMessage, len(rows))
-	for _, row := range rows {
-		overrides[row.Key] = row.Value
-	}
-
-	merged := h.defaults()
 	res := make(map[string]interface{})
-	for k, v := range merged {
+	for k, v := range h.defaults() {
 		res[k] = v
 	}
-
-	for key, raw := range overrides {
-		if _, ok := merged[key]; ok {
-			var v float64
-			if json.Unmarshal(raw, &v) == nil {
-				res[key] = v
-			}
-		}
-
 	res["mcp_api_token"] = h.cfg.ApiToken
 	res["cloudflare_configured"] = h.cfg.CloudflareAPIToken != "" && h.cfg.CloudflareZoneID != ""
 
@@ -191,6 +186,34 @@ func validateSettings(values map[string]float64) error {
 		}
 	}
 	return nil
+}
+
+func (h *Handler) applyStoredRows(rows []db.Setting) {
+	values := make(map[string]float64)
+	for _, row := range rows {
+		if !isSettingKey(row.Key) {
+			continue
+		}
+		var value float64
+		if json.Unmarshal(row.Value, &value) != nil {
+			continue
+		}
+		candidate := map[string]float64{row.Key: value}
+		if validateSettings(candidate) != nil {
+			continue
+		}
+		values[row.Key] = value
+	}
+	h.applyToConfig(values)
+}
+
+func isSettingKey(key string) bool {
+	for _, allowed := range settingKeys {
+		if key == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 type hostStatsResponse struct {
