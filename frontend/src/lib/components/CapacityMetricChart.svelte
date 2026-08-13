@@ -1,4 +1,5 @@
 <script lang="ts">
+	import StorageCapacityMetric from './StorageCapacityMetric.svelte';
 	import { deriveAdaptiveMetricDomain } from '$lib/utils/host-telemetry';
 
 	type Resource = 'memory' | 'cpu' | 'storage' | 'network' | 'neutral';
@@ -126,54 +127,63 @@
 						? '1 sample'
 						: 'sampling';
 	$: compatibilityTone = tone;
+	$: storagePercent = cleanSeries.length > 0
+		? cleanSeries[cleanSeries.length - 1]
+		: percent !== null && Number.isFinite(percent)
+			? percent
+			: Number.parseFloat(effectiveIndicator) || 0;
 </script>
 
-<article class={`min-w-0 p-4 ${className}`.trim()} aria-label={`${label}: ${value}`} data-legacy-tone={compatibilityTone}>
-	<div class="flex items-start justify-between gap-3">
-		<div class="min-w-0">
-			<div class="flex items-center gap-2">
-				<span class={`h-1.5 w-1.5 rounded-full ${resourceClass.dot}`}></span>
-				<p class="metric-label truncate">{label}</p>
+{#if inferredResource === 'storage'}
+	<StorageCapacityMetric {label} {value} {detail} percent={storagePercent} {className} />
+{:else}
+	<article class={`min-w-0 p-4 ${className}`.trim()} aria-label={`${label}: ${value}`} data-legacy-tone={compatibilityTone}>
+		<div class="flex items-start justify-between gap-3">
+			<div class="min-w-0">
+				<div class="flex items-center gap-2">
+					<span class={`h-1.5 w-1.5 rounded-full ${resourceClass.dot}`}></span>
+					<p class="metric-label truncate">{label}</p>
+				</div>
+				<p class="metric-value mt-1 truncate text-xl font-semibold tracking-tight text-gray-950 dark:text-white">{value}</p>
 			</div>
-			<p class="metric-value mt-1 truncate text-xl font-semibold tracking-tight text-gray-950 dark:text-white">{value}</p>
+			{#if effectiveIndicator}
+				<p class="metric-value shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-400">{effectiveIndicator}</p>
+			{/if}
 		</div>
-		{#if effectiveIndicator}
-			<p class="metric-value shrink-0 text-xs font-semibold text-gray-500 dark:text-gray-400">{effectiveIndicator}</p>
-		{/if}
-	</div>
 
-	<div class="relative mt-3 h-[5.75rem] overflow-hidden rounded-md border border-gray-200/90 bg-white dark:border-gray-800/90 dark:bg-neutral-950">
-		<svg class="h-full w-full" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none" role="img" aria-hidden="true">
-			<g class="stroke-gray-100/45 dark:stroke-neutral-800/35" stroke-width="0.7">
-				<line x1="0" x2={chartWidth} y1={chartHeight * 0.25} y2={chartHeight * 0.25} />
-				<line x1="0" x2={chartWidth} y1={chartHeight * 0.5} y2={chartHeight * 0.5} />
-				<line x1="0" x2={chartWidth} y1={chartHeight * 0.75} y2={chartHeight * 0.75} />
-			</g>
-			{#if areaPath}<path d={areaPath} class={resourceClass.fill} />{/if}
-			{#if linePath}
-				<path
-					d={linePath}
-					fill="none"
-					class={resourceClass.stroke}
-					stroke-width="1.2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					vector-effect="non-scaling-stroke"
-				/>
+		<div class="relative mt-3 h-[5.75rem] overflow-hidden rounded-md border border-gray-200/90 bg-white dark:border-gray-800/90 dark:bg-neutral-950">
+			<svg class="h-full w-full" viewBox={`0 0 ${chartWidth} ${chartHeight}`} preserveAspectRatio="none" role="img" aria-hidden="true">
+				<g class="stroke-gray-100/45 dark:stroke-neutral-800/35" stroke-width="0.7">
+					<line x1="0" x2={chartWidth} y1={chartHeight * 0.25} y2={chartHeight * 0.25} />
+					<line x1="0" x2={chartWidth} y1={chartHeight * 0.5} y2={chartHeight * 0.5} />
+					<line x1="0" x2={chartWidth} y1={chartHeight * 0.75} y2={chartHeight * 0.75} />
+				</g>
+				{#if areaPath}<path d={areaPath} class={resourceClass.fill} />{/if}
+				{#if linePath}
+					<path
+						d={linePath}
+						fill="none"
+						class={resourceClass.stroke}
+						stroke-width="1.2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						vector-effect="non-scaling-stroke"
+					/>
+				{/if}
+				{#if latestPoint}
+					<circle cx={latestPoint.x} cy={latestPoint.y} r="1.45" class={resourceClass.point} />
+				{:else if currentPoint}
+					<circle cx={currentPoint.x} cy={currentPoint.y} r="1.65" class={resourceClass.point} />
+				{/if}
+			</svg>
+			{#if chartMessage}
+				<div class="pointer-events-none absolute inset-0 flex items-center justify-center px-4 text-center text-xs text-gray-400 dark:text-gray-600">{chartMessage}</div>
 			{/if}
-			{#if latestPoint}
-				<circle cx={latestPoint.x} cy={latestPoint.y} r="1.45" class={resourceClass.point} />
-			{:else if currentPoint}
-				<circle cx={currentPoint.x} cy={currentPoint.y} r="1.65" class={resourceClass.point} />
-			{/if}
-		</svg>
-		{#if chartMessage}
-			<div class="pointer-events-none absolute inset-0 flex items-center justify-center px-4 text-center text-xs text-gray-400 dark:text-gray-600">{chartMessage}</div>
-		{/if}
-	</div>
+		</div>
 
-	<div class="mt-2 flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
-		<p class="truncate">{detail}</p>
-		<span class="shrink-0 font-mono">{effectiveRangeLabel}</span>
-	</div>
-</article>
+		<div class="mt-2 flex items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+			<p class="truncate">{detail}</p>
+			<span class="shrink-0 font-mono">{effectiveRangeLabel}</span>
+		</div>
+	</article>
+{/if}
