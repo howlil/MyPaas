@@ -18,15 +18,14 @@ import (
 	"mypaas/internal/statd"
 )
 
-// settingKeys lists numeric settings that have an authoritative runtime
-// consumer. Project resource defaults intentionally live in resource profiles;
-// keeping a second admin-level default would create two competing sources of
-// truth for new-project configuration.
+// settingKeys lists numeric settings with an authoritative live runtime
+// consumer. Project defaults live in resource profiles, while deployment
+// concurrency is installation-level because the worker semaphore is created at
+// process startup. Neither is exposed as a misleading live-editable setting.
 var settingKeys = []string{
 	"user_ram_quota_gb",
 	"user_cpu_quota",
 	"max_projects",
-	"max_concurrent_deploys",
 	"build_timeout_minutes",
 }
 
@@ -66,7 +65,6 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 				res[key] = v
 			}
 		}
-	}
 
 	res["mcp_api_token"] = h.cfg.ApiToken
 	res["cloudflare_configured"] = h.cfg.CloudflareAPIToken != "" && h.cfg.CloudflareZoneID != ""
@@ -186,10 +184,6 @@ func validateSettings(values map[string]float64) error {
 			if value < 1 || value > 10000 || value != math.Trunc(value) {
 				return errors.New("maximum projects must be a whole number between 1 and 10000")
 			}
-		case "max_concurrent_deploys":
-			if value < 1 || value > 32 || value != math.Trunc(value) {
-				return errors.New("concurrent deployments must be a whole number between 1 and 32")
-			}
 		case "build_timeout_minutes":
 			if value < 1 || value > 1440 || value != math.Trunc(value) {
 				return errors.New("build timeout must be a whole number between 1 and 1440 minutes")
@@ -287,11 +281,10 @@ func (h *Handler) HostStats(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) defaults() map[string]float64 {
 	return map[string]float64{
-		"user_ram_quota_gb":      float64(h.cfg.UserRAMQuotaMB) / 1024,
-		"user_cpu_quota":         h.cfg.UserCPUQuota,
-		"max_projects":           float64(h.cfg.MaxProjects),
-		"max_concurrent_deploys": float64(h.cfg.MaxConcurrentDeploys),
-		"build_timeout_minutes":  float64(h.cfg.BuildTimeoutMinutes),
+		"user_ram_quota_gb":     float64(h.cfg.UserRAMQuotaMB) / 1024,
+		"user_cpu_quota":        h.cfg.UserCPUQuota,
+		"max_projects":          float64(h.cfg.MaxProjects),
+		"build_timeout_minutes": float64(h.cfg.BuildTimeoutMinutes),
 	}
 }
 
@@ -304,9 +297,6 @@ func (h *Handler) applyToConfig(values map[string]float64) {
 	}
 	if v, ok := values["max_projects"]; ok {
 		h.cfg.MaxProjects = int32(v)
-	}
-	if v, ok := values["max_concurrent_deploys"]; ok {
-		h.cfg.MaxConcurrentDeploys = int(v)
 	}
 	if v, ok := values["build_timeout_minutes"]; ok {
 		h.cfg.BuildTimeoutMinutes = int(v)
