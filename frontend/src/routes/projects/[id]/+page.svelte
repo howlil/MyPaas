@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Activity, ArrowRight, Database, ExternalLink, History, KeyRound, Settings2 } from '@lucide/svelte';
+	import { Activity, ArrowRight, Database, History, KeyRound, Settings2 } from '@lucide/svelte';
 	import { page } from '$app/stores';
 	import ActionLink from '$components/ActionLink.svelte';
 	import EmptyState from '$components/EmptyState.svelte';
@@ -8,7 +8,6 @@
 	import ResourceMeter from '$components/ResourceMeter.svelte';
 	import StatusBadge from '$components/StatusBadge.svelte';
 	import { api } from '$api';
-	import { projectURL } from '$lib/utils/urls';
 	import { runtimeServiceSummary, selectPrimaryProjectMetric } from '$lib/utils/project-dashboard';
 	import type { DBStudioStatus, Deployment, MetricsSnapshot, Project } from '$types';
 
@@ -34,7 +33,6 @@
 	$: metricsUpdatedLabel = metrics?.collectedAt
 		? `Updated ${new Date(metrics.collectedAt).toLocaleTimeString()}`
 		: 'Waiting for runtime sample';
-	$: publicProjectURL = project ? projectURL(project.subdomain, $page.url.protocol, $page.url.hostname) : '';
 	$: applicationState = applicationStateFor(project, lastDeploy);
 	$: runtimeLabel = project
 		? project.deployMode === 'compose'
@@ -115,14 +113,6 @@
 		if (!currentProject) {
 			return { title: 'Loading application', body: 'Reading current project state.', action: null as null | { label: string; href: string } };
 		}
-
-		if (currentProject.status === 'running') {
-			return {
-				title: 'Application is running',
-				body: 'The current runtime is serving traffic normally.',
-				action: { label: 'Open app', href: publicProjectURL }
-			};
-		}
 		if (currentProject.status === 'building') {
 			return {
 				title: 'Deployment in progress',
@@ -173,7 +163,6 @@
 
 {#if loading}
 	<div class="space-y-4">
-		<div class="surface h-32 animate-pulse"></div>
 		<div class="surface h-56 animate-pulse"></div>
 		<div class="grid gap-4 lg:grid-cols-2">
 			<div class="surface h-64 animate-pulse"></div>
@@ -193,47 +182,38 @@
 			</div>
 		{/if}
 
-		<section class="surface overflow-hidden">
-			<div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-				<div class="min-w-0">
-					<div class="flex flex-wrap items-center gap-2">
-						<StatusBadge status={project.status} pulse />
-						<h2 class="text-base font-semibold text-gray-950 dark:text-white">{applicationState.title}</h2>
+		{#if project.status !== 'running'}
+			<section class="surface overflow-hidden">
+				<div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+					<div class="min-w-0">
+						<div class="flex flex-wrap items-center gap-2">
+							<StatusBadge status={project.status} pulse />
+							<h2 class="text-base font-semibold text-gray-950 dark:text-white">{applicationState.title}</h2>
+						</div>
+						<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{applicationState.body}</p>
 					</div>
-					<p class="mt-2 text-sm text-gray-600 dark:text-gray-300">{applicationState.body}</p>
-				</div>
-				{#if applicationState.action}
-					{#if applicationState.action.label === 'Open app'}
-						<ActionLink href={applicationState.action.href} variant="secondary" size="xs" external>
-							<ExternalLink slot="icon" class="h-3.5 w-3.5" />
-							Open app
-						</ActionLink>
-					{:else}
+					{#if applicationState.action}
 						<ActionLink href={applicationState.action.href} variant="secondary" size="xs">
 							<ArrowRight slot="icon" class="h-3.5 w-3.5" />
 							{applicationState.action.label}
 						</ActionLink>
 					{/if}
-				{/if}
-			</div>
-		</section>
+				</div>
+			</section>
+		{/if}
 
 		<section class="surface overflow-hidden">
 			<div class="flex flex-wrap items-start justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-neutral-800">
 				<div>
-					<div class="flex flex-wrap items-center gap-2">
-						<h2 class="text-sm font-semibold text-gray-950 dark:text-white">Runtime metrics</h2>
-						{#if primaryMetric && project.status === 'running'}
-							<span class="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700 dark:bg-neutral-800 dark:text-gray-200">Live</span>
-						{/if}
-					</div>
+					<h2 class="text-sm font-semibold text-gray-950 dark:text-white">Runtime resources</h2>
 					<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
 						{runtimeSummary.label}{runtimeSummary.otherServices > 0 ? ` · ${runtimeSummary.otherServices} other service${runtimeSummary.otherServices === 1 ? '' : 's'}` : ''} · {metricsUpdatedLabel}
 					</p>
+					<p class="mt-1 text-[11px] text-gray-400 dark:text-gray-500">mypaas-statd preferred · container-engine fallback when unavailable</p>
 				</div>
 				<ActionLink href={`${base}/metrics`} variant="ghost" size="xs">
 					<Activity slot="icon" class="h-3.5 w-3.5" />
-					View metrics
+					Diagnostics
 				</ActionLink>
 			</div>
 
@@ -254,14 +234,29 @@
 						</div>
 					</div>
 					<div class="p-5">
+						<p class="metric-label">Persistent storage</p>
+						<p class="metric-value mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">Not measured</p>
+						<p class="mt-3 text-xs leading-5 text-gray-500 dark:text-gray-400">Project-owned persistent data is not part of the current runtime telemetry contract. Host disk usage is kept separate.</p>
+					</div>
+				</div>
+				<div class="grid gap-px border-t border-gray-100 bg-gray-100 dark:border-neutral-800 dark:bg-neutral-800 sm:grid-cols-3">
+					<div class="bg-white px-5 py-3 dark:bg-neutral-900">
+						<p class="metric-label">Service</p>
+						<p class="mt-1 truncate font-mono text-sm text-gray-950 dark:text-white">{primaryMetric.service}</p>
+					</div>
+					<div class="bg-white px-5 py-3 dark:bg-neutral-900">
 						<p class="metric-label">Uptime</p>
-						<p class="metric-value mt-2 text-2xl font-semibold tracking-tight text-gray-950 dark:text-white">{primaryMetric.uptime}</p>
-						<p class="mt-3 text-xs text-gray-500 dark:text-gray-400">Service <span class="font-mono text-gray-700 dark:text-gray-300">{primaryMetric.service}</span></p>
+						<p class="metric-value mt-1 text-sm font-medium text-gray-950 dark:text-white">{primaryMetric.uptime}</p>
+					</div>
+					<div class="bg-white px-5 py-3 dark:bg-neutral-900">
+						<p class="metric-label">Telemetry policy</p>
+						<p class="mt-1 text-sm text-gray-950 dark:text-white">statd preferred</p>
+						<p class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400">Container engine fallback</p>
 					</div>
 				</div>
 			{:else}
 				<div class="px-5 py-8">
-					<EmptyState title="No runtime metrics yet." description="Metrics appear here when a runtime is available. Detailed metrics remain available for service-level inspection." compact />
+					<EmptyState title="No runtime metrics yet." description="CPU and memory appear when a runtime is available. Project-scoped persistent storage is not measured by the current telemetry contract." compact />
 				</div>
 			{/if}
 		</section>
