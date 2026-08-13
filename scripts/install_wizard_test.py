@@ -68,11 +68,15 @@ class InstallConfigTest(unittest.TestCase):
 
         self.assertIn('INSTALL_STATD="${INSTALL_STATD:-true}"', installer)
         self.assertIn('STATD_INSTALL_MODE="${STATD_INSTALL_MODE:-release}"', installer)
-        self.assertIn('STATD_VERSION="${STATD_VERSION:-v0.1.0}"', installer)
+        self.assertIn('STATD_VERSION="${STATD_VERSION:-v0.2.0}"', installer)
+        self.assertIn('STATD_ONLY="${STATD_ONLY:-false}"', installer)
+        self.assertIn("--statd-only)", installer)
         self.assertIn("mypaas-statd-linux-${arch}.tar.gz", installer)
         self.assertIn("SHA256SUMS.selected", installer)
         self.assertIn("sha256sum -c", installer)
-        self.assertIn("systemctl enable --now mypaas-statd", installer)
+        self.assertIn("mypaas-statd --version", installer)
+        self.assertIn("systemctl enable mypaas-statd", installer)
+        self.assertIn("systemctl restart mypaas-statd", installer)
         self.assertIn("STATD_SOCKET=/run/mypaas/statd.sock", installer)
         self.assertNotIn('pull --ff-only origin "$STATD_REF" || true', installer)
 
