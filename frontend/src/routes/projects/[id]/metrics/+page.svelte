@@ -31,7 +31,9 @@
 		? [
 				{ label: 'Service', value: primary.service },
 				{ label: 'Uptime', value: primary.uptime },
-				{ label: 'Collected', value: snapshot?.collectedAt ? new Date(snapshot.collectedAt).toLocaleTimeString() : '-' }
+				{ label: 'Collected', value: snapshot?.collectedAt ? new Date(snapshot.collectedAt).toLocaleTimeString() : '-' },
+				{ label: 'Telemetry', value: 'statd preferred' },
+				{ label: 'Persistent storage', value: 'Not measured' }
 			]
 		: [];
 	$: updatedLabel = primary && snapshot?.collectedAt
@@ -90,8 +92,11 @@
 </svelte:head>
 
 <div class="space-y-4">
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<p class="text-sm text-gray-500 dark:text-gray-400" aria-live="polite">{updatedLabel}</p>
+	<div class="flex flex-wrap items-start justify-between gap-3">
+		<div>
+			<p class="text-sm text-gray-700 dark:text-gray-300">Service-level runtime diagnostics and optional edge traffic analytics.</p>
+			<p class="mt-1 text-xs text-gray-500 dark:text-gray-400" aria-live="polite">{updatedLabel} · mypaas-statd preferred, container-engine fallback</p>
+		</div>
 		<ActionButton variant="secondary" size="sm" loading={refreshing} loadingLabel="Refreshing" on:click={() => void load()}>
 			<RefreshCw slot="icon" class="h-4 w-4" />
 			Refresh
@@ -163,7 +168,7 @@
 			{/each}
 		</div>
 	{:else if primary}
-		<SectionPanel title="Runtime usage" description="Current CPU and memory sample for the selected service." contentClass="p-0">
+		<SectionPanel title="Service diagnostics" description="Current CPU and memory sample for the selected runtime service." contentClass="p-0">
 			<svelte:fragment slot="actions">
 				{#if services.length > 1}
 					<label class="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -175,7 +180,7 @@
 				{/if}
 			</svelte:fragment>
 
-			<div class="grid gap-px bg-gray-100 dark:bg-neutral-800 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_18rem]">
+			<div class="grid gap-px bg-gray-100 dark:bg-neutral-800 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_20rem]">
 				<CapacityMetricChart label="CPU" value={`${primary.cpu.toFixed(2)}%`} detail="current runtime sample" percent={cpuPercent} resource="cpu" className="bg-white dark:bg-neutral-900" />
 				<CapacityMetricChart label="Memory" value={`${primary.memoryMb.toFixed(1)} MB`} detail={`${primary.memoryLimitMb.toFixed(0)} MB limit`} percent={Math.min(memoryPercent, 100)} resource="memory" className="bg-white dark:bg-neutral-900" />
 				<div class="bg-white p-4 dark:bg-neutral-900">
@@ -188,6 +193,7 @@
 							</div>
 						{/each}
 					</div>
+					<p class="mt-3 text-[11px] leading-4 text-gray-500 dark:text-gray-400">Persistent storage means project-owned managed data. Host root-disk usage is intentionally not substituted here.</p>
 				</div>
 			</div>
 		</SectionPanel>
