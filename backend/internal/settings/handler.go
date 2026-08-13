@@ -188,7 +188,7 @@ func validateSettings(values map[string]float64) error {
 	return nil
 }
 
-func (h *Handler) applyStoredRows(rows []db.Setting) {
+func (h *Handler) applyStoredRows(rows []db.PlatformSetting) {
 	values := make(map[string]float64)
 	for _, row := range rows {
 		if !isSettingKey(row.Key) {
