@@ -1,10 +1,13 @@
 package settings
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -16,14 +19,14 @@ import (
 	"mypaas/internal/statd"
 )
 
-// settingKeys lists the keys that can be overridden via the API.
+// settingKeys lists numeric settings with an authoritative live runtime
+// consumer. Project defaults live in resource profiles, while deployment
+// concurrency is installation-level because the worker semaphore is created at
+// process startup. Neither is exposed as a misleading live-editable setting.
 var settingKeys = []string{
 	"user_ram_quota_gb",
 	"user_cpu_quota",
 	"max_projects",
-	"max_concurrent_deploys",
-	"project_default_ram_mb",
-	"project_default_cpu",
 	"build_timeout_minutes",
 }
 
@@ -33,38 +36,31 @@ type Handler struct {
 }
 
 func NewHandler(queries *db.Queries, cfg *config.Config) *Handler {
-	return &Handler{queries: queries, cfg: cfg}
+	h := &Handler{queries: queries, cfg: cfg}
+	// The DB is the persisted source for owner-edited live settings. Rehydrate
+	// the shared config before the HTTP server starts accepting requests so a
+	// process restart cannot silently revert quota/build behavior to env values.
+	if rows, err := queries.GetAllSettings(context.Background()); err == nil {
+		h.applyStoredRows(rows)
+	}
+	return h
 }
 
-// Get returns the current platform settings merged from env defaults and DB
-// overrides. Only whitelisted keys are exposed.
+// Get returns the effective live platform settings. DB overrides are applied
+// to the same shared config before the response is produced so displayed and
+// enforced values cannot diverge.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queries.GetAllSettings(r.Context())
 	if err != nil {
 		httpx.DomainError(w, err)
 		return
 	}
+	h.applyStoredRows(rows)
 
-	overrides := make(map[string]json.RawMessage, len(rows))
-	for _, row := range rows {
-		overrides[row.Key] = row.Value
-	}
-
-	merged := h.defaults()
 	res := make(map[string]interface{})
-	for k, v := range merged {
+	for k, v := range h.defaults() {
 		res[k] = v
 	}
-
-	for key, raw := range overrides {
-		if _, ok := merged[key]; ok {
-			var v float64
-			if json.Unmarshal(raw, &v) == nil {
-				res[key] = v
-			}
-		}
-	}
-
 	res["mcp_api_token"] = h.cfg.ApiToken
 	res["cloudflare_configured"] = h.cfg.CloudflareAPIToken != "" && h.cfg.CloudflareZoneID != ""
 
@@ -73,7 +69,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RegenerateMCPToken(w http.ResponseWriter, r *http.Request) {
 	randBytes := make([]byte, 24)
-	rand.Read(randBytes)
+	_, _ = rand.Read(randBytes)
 	newToken := "mp_" + hex.EncodeToString(randBytes)
 
 	rawToken, _ := json.Marshal(newToken)
@@ -126,24 +122,20 @@ func (h *Handler) UpdateCloudflareConfig(w http.ResponseWriter, r *http.Request)
 	h.Get(w, r)
 }
 
-// Update upserts one or more platform settings and applies them to the
-// running config so changes take effect immediately.
+// Update upserts one or more platform settings and applies the supported
+// runtime values to the in-memory config.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	var req map[string]float64
 	if err := httpx.DecodeJSON(r, &req); err != nil {
 		httpx.Error(w, http.StatusBadRequest, "INVALID_BODY", "Request body must be a JSON object with numeric values.", nil)
 		return
 	}
-
-	allowed := make(map[string]struct{}, len(settingKeys))
-	for _, k := range settingKeys {
-		allowed[k] = struct{}{}
+	if err := validateSettings(req); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "INVALID_SETTING", err.Error(), nil)
+		return
 	}
 
 	for key, value := range req {
-		if _, ok := allowed[key]; !ok {
-			continue
-		}
 		raw, err := json.Marshal(value)
 		if err != nil {
 			httpx.Error(w, http.StatusBadRequest, "INVALID_VALUE", "Cannot encode value for "+key, nil)
@@ -158,11 +150,70 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Apply overrides to the in-memory config so they take effect immediately.
 	h.applyToConfig(req)
-
-	// Return the merged view so the frontend can confirm.
 	h.Get(w, r)
+}
+
+func validateSettings(values map[string]float64) error {
+	allowed := make(map[string]struct{}, len(settingKeys))
+	for _, key := range settingKeys {
+		allowed[key] = struct{}{}
+	}
+	for key, value := range values {
+		if _, ok := allowed[key]; !ok {
+			return fmt.Errorf("unknown platform setting %q", key)
+		}
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return fmt.Errorf("%s must be a finite number", key)
+		}
+		switch key {
+		case "user_ram_quota_gb":
+			if value <= 0 || value > 1024 {
+				return errors.New("user RAM quota must be greater than 0 and at most 1024 GB")
+			}
+		case "user_cpu_quota":
+			if value <= 0 || value > 256 {
+				return errors.New("user CPU quota must be greater than 0 and at most 256 cores")
+			}
+		case "max_projects":
+			if value < 1 || value > 10000 || value != math.Trunc(value) {
+				return errors.New("maximum projects must be a whole number between 1 and 10000")
+			}
+		case "build_timeout_minutes":
+			if value < 1 || value > 1440 || value != math.Trunc(value) {
+				return errors.New("build timeout must be a whole number between 1 and 1440 minutes")
+			}
+		}
+	}
+	return nil
+}
+
+func (h *Handler) applyStoredRows(rows []db.PlatformSetting) {
+	values := make(map[string]float64)
+	for _, row := range rows {
+		if !isSettingKey(row.Key) {
+			continue
+		}
+		var value float64
+		if json.Unmarshal(row.Value, &value) != nil {
+			continue
+		}
+		candidate := map[string]float64{row.Key: value}
+		if validateSettings(candidate) != nil {
+			continue
+		}
+		values[row.Key] = value
+	}
+	h.applyToConfig(values)
+}
+
+func isSettingKey(key string) bool {
+	for _, allowed := range settingKeys {
+		if key == allowed {
+			return true
+		}
+	}
+	return false
 }
 
 type hostStatsResponse struct {
@@ -252,27 +303,11 @@ func (h *Handler) HostStats(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) defaults() map[string]float64 {
-	cap := host.GetCapacity()
-
-	// Smart defaults based on physical capacity
-	defaultUserRAM := float64(h.cfg.UserRAMQuotaMB) / 1024
-	defaultProjectRAM := float64(512)
-
-	// If VM has <= 2GB RAM (approx 2048 * 1024 * 1024 = 2147483648)
-	// Give max 1.5GB to user, default 256MB per project.
-	if cap.TotalRAMBytes > 0 && cap.TotalRAMBytes <= (2500*1024*1024) {
-		defaultUserRAM = 1.5
-		defaultProjectRAM = 256
-	}
-
 	return map[string]float64{
-		"user_ram_quota_gb":      defaultUserRAM,
-		"user_cpu_quota":         h.cfg.UserCPUQuota,
-		"max_projects":           float64(h.cfg.MaxProjects),
-		"max_concurrent_deploys": float64(h.cfg.MaxConcurrentDeploys),
-		"project_default_ram_mb": defaultProjectRAM,
-		"project_default_cpu":    0.5,
-		"build_timeout_minutes":  float64(h.cfg.BuildTimeoutMinutes),
+		"user_ram_quota_gb":     float64(h.cfg.UserRAMQuotaMB) / 1024,
+		"user_cpu_quota":        h.cfg.UserCPUQuota,
+		"max_projects":          float64(h.cfg.MaxProjects),
+		"build_timeout_minutes": float64(h.cfg.BuildTimeoutMinutes),
 	}
 }
 
@@ -285,9 +320,6 @@ func (h *Handler) applyToConfig(values map[string]float64) {
 	}
 	if v, ok := values["max_projects"]; ok {
 		h.cfg.MaxProjects = int32(v)
-	}
-	if v, ok := values["max_concurrent_deploys"]; ok {
-		h.cfg.MaxConcurrentDeploys = int(v)
 	}
 	if v, ok := values["build_timeout_minutes"]; ok {
 		h.cfg.BuildTimeoutMinutes = int(v)
