@@ -1,0 +1,25 @@
+services:
+  app:
+    image: nginx:1.27-alpine
+    expose:
+      - "80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: appdb
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: fixture-only-password
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d appdb"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    volumes:
+      - data:/var/lib/postgresql/data
+
+volumes:
+  data:
