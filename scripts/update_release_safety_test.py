@@ -22,6 +22,12 @@ class UpdateReleaseSafetyContractTest(unittest.TestCase):
         self.assertIn('image inspect "$DASHBOARD_IMAGE_REPO:$MYPAAS_IMAGE_TAG"', deploy)
         self.assertIn('if [[ "$SKIP_IMAGE_PULL" != "true" ]]', deploy)
 
+    def test_explicit_image_tag_overrides_env_file_pin(self):
+        deploy = self.text("scripts/deploy-to-vm.sh")
+        self.assertIn('EXPLICIT_IMAGE_TAG_SET="${MYPAAS_IMAGE_TAG+x}"', deploy)
+        self.assertIn('EXPLICIT_IMAGE_TAG="${MYPAAS_IMAGE_TAG:-}"', deploy)
+        self.assertIn('MYPAAS_IMAGE_TAG="$EXPLICIT_IMAGE_TAG"', deploy)
+
     def test_updater_verifies_target_and_restored_runtime(self):
         updater = self.text("scripts/update-vm.sh")
         self.assertIn('verify_stack "$docker_cmd" "$target_sha" "$target_sha"', updater)
