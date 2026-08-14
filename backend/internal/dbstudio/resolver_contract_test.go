@@ -102,17 +102,12 @@ func TestSupportedDatabaseURLsNeverExposePasswordInConnectionMetadata(t *testing
 		driver DriverID
 	}{
 		{"postgres://app:very-secret@db:5432/appdb", DriverPostgres},
-		{"mysql://app:very-secret@tcp(db:3306)/appdb", DriverMySQL},
+		{"mysql://app:very-secret@db:3306/appdb", DriverMySQL},
 		{"mariadb://app:very-secret@db:3306/appdb", DriverMariaDB},
 	}
 	for _, tt := range urls {
 		conn, err := connectionFromURL(tt.raw, "DATABASE_URL")
 		if err != nil {
-			// MySQL DSNs are not URL-shaped and therefore are intentionally tested
-			// through env-parts; URL aliases remain covered where supported.
-			if tt.driver == DriverMySQL {
-				continue
-			}
 			t.Fatalf("connectionFromURL(%q): %v", tt.raw, err)
 		}
 		if conn.Driver != tt.driver {
