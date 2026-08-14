@@ -83,6 +83,11 @@ def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def project_prefix(timestamp: str) -> str:
+    compact = "".join(c for c in timestamp.lower() if c.isalnum())
+    return f"beta-db-{compact[:12]}"
+
+
 def fixture_payload(engine: str, base_directory: str, prefix: str, repo: str, branch: str) -> dict[str, Any]:
     return {
         "name": f"{prefix}-{engine}",
@@ -263,7 +268,7 @@ def main(argv: list[str] | None = None) -> int:
 
     started = utc_now()
     compact = started.replace(":", "").replace("-", "")
-    prefix = f"beta-db-{compact.lower()[:15]}"
+    prefix = project_prefix(compact)
     run_id = f"{compact}-{''.join(c for c in args.git_sha if c.isalnum())[:12] or 'unknown'}"
     client = Client(args.base_url, args.token)
     results = [
