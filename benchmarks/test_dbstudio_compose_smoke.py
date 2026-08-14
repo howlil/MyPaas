@@ -13,6 +13,7 @@ class DBStudioComposeSmokeTest(unittest.TestCase):
             "main",
         )
         self.assertEqual(payload["deployMode"], "compose")
+        self.assertEqual(payload["branch"], "main")
         self.assertEqual(payload["mainService"], "app")
         self.assertEqual(payload["appPort"], 80)
         self.assertEqual(payload["composeFilePath"], "compose.yml")
@@ -60,11 +61,15 @@ class DBStudioComposeSmokeTest(unittest.TestCase):
         report = {
             "runId": "run",
             "gitSha": "abc",
+            "fixtureRef": "abc",
+            "fixtureBranch": "test/beta-readiness-candidate",
+            "fixtureResolvedSha": "abc",
             "pass": True,
             "engines": [result.__dict__],
         }
         text = dbstudio_compose_smoke.markdown(report)
         self.assertNotIn("token", text.lower())
+        self.assertIn("Fixture branch", text)
         self.assertIn("postgres", text)
 
 
