@@ -63,6 +63,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	res["mcp_api_token"] = h.cfg.ApiToken
 	res["cloudflare_configured"] = h.cfg.CloudflareAPIToken != "" && h.cfg.CloudflareZoneID != ""
+	res["build_sha"] = strings.TrimSpace(os.Getenv("MYPAAS_BUILD_SHA"))
 
 	httpx.JSON(w, http.StatusOK, res)
 }
