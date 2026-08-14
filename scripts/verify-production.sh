@@ -8,6 +8,9 @@ RUN_BACKUP="${RUN_BACKUP:-false}"
 DOCKER_BIN="${DOCKER_BIN:-docker}"
 COMPOSE_BIN="${COMPOSE_BIN:-$DOCKER_BIN compose}"
 CADDY_ADMIN_SOCKET="${CADDY_ADMIN_SOCKET:-/run/mypaas/caddy-admin.sock}"
+EXPECTED_BUILD_SHA="${EXPECTED_BUILD_SHA:-}"
+EXPECTED_IMAGE_TAG="${EXPECTED_IMAGE_TAG:-$EXPECTED_BUILD_SHA}"
+REQUIRE_PROJECT_ROUTE="${REQUIRE_PROJECT_ROUTE:-false}"
 
 cd "$ROOT_DIR"
 
@@ -22,6 +25,7 @@ source "$ENV_FILE"
 set +a
 
 : "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}"
+: "${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required}"
 
 CONTROL_NETWORK="${CONTROL_NETWORK:-mypaas-control}"
 PROJECT_NETWORK="${PROJECT_NETWORK:-mypaas-projects}"
@@ -33,6 +37,13 @@ fi
 
 container_networks() {
   $DOCKER_BIN inspect --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}} {{end}}' "$1"
+}
+
+container_env_value() {
+  local container="$1"
+  local key="$2"
+  $DOCKER_BIN inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$container" 2>/dev/null \
+    | sed -n "s/^${key}=//p" | tail -n 1
 }
 
 require_network() {
@@ -55,6 +66,46 @@ forbid_network() {
     echo "$container must not be attached to isolated network $network." >&2
     exit 1
   fi
+}
+
+caddy_admin_routes() {
+  if curl -fsS --unix-socket "$CADDY_ADMIN_SOCKET" http://localhost/config/apps/http/servers/srv0/routes 2>/dev/null; then
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo curl -fsS --unix-socket "$CADDY_ADMIN_SOCKET" http://localhost/config/apps/http/servers/srv0/routes
+    return
+  fi
+  return 1
+}
+
+first_project_host() {
+  local domain="$1"
+  python3 -c '
+import json, sys
+
+domain = sys.argv[1].strip(".")
+try:
+    root = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+hosts = []
+def walk(value):
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key == "host" and isinstance(child, list):
+                hosts.extend(str(item) for item in child)
+            walk(child)
+    elif isinstance(value, list):
+        for child in value:
+            walk(child)
+walk(root)
+for host in hosts:
+    host = host.strip(".")
+    if host != domain and host.endswith("." + domain) and "*" not in host:
+        print(host)
+        break
+' "$domain"
 }
 
 echo "Checking production containers..."
@@ -114,17 +165,41 @@ if [[ "${ENABLE_METRICS:-false}" == "true" ]]; then
   curl -fsS -u "$METRICS_USERNAME:$METRICS_PASSWORD" http://127.0.0.1:8080/metrics >/dev/null
 fi
 
+echo "Checking dashboard reachability..."
+curl -fsS http://127.0.0.1:3000/ >/dev/null
+
+echo "Checking running release identity..."
+actual_build_sha="$(container_env_value mypaas-api MYPAAS_BUILD_SHA)"
+if [[ -z "$actual_build_sha" || "$actual_build_sha" == "unknown" ]]; then
+  echo "mypaas-api does not expose a concrete MYPAAS_BUILD_SHA." >&2
+  exit 1
+fi
+if [[ -n "$EXPECTED_BUILD_SHA" && "$actual_build_sha" != "$EXPECTED_BUILD_SHA" ]]; then
+  echo "Running build SHA $actual_build_sha does not match expected $EXPECTED_BUILD_SHA." >&2
+  exit 1
+fi
+if [[ -n "$EXPECTED_IMAGE_TAG" ]]; then
+  api_image="$($DOCKER_BIN inspect --format '{{.Config.Image}}' mypaas-api)"
+  dashboard_image="$($DOCKER_BIN inspect --format '{{.Config.Image}}' mypaas-dashboard)"
+  if [[ "$api_image" != *":$EXPECTED_IMAGE_TAG" ]]; then
+    echo "API image $api_image does not match expected tag $EXPECTED_IMAGE_TAG." >&2
+    exit 1
+  fi
+  if [[ "$dashboard_image" != *":$EXPECTED_IMAGE_TAG" ]]; then
+    echo "Dashboard image $dashboard_image does not match expected tag $EXPECTED_IMAGE_TAG." >&2
+    exit 1
+  fi
+fi
+
 echo "Checking Caddy Admin Unix socket..."
 if [[ ! -S "$CADDY_ADMIN_SOCKET" ]]; then
   echo "Caddy Admin socket is missing or is not a Unix socket: $CADDY_ADMIN_SOCKET" >&2
   exit 1
 fi
-if ! curl -fsS --unix-socket "$CADDY_ADMIN_SOCKET" http://localhost/config/apps/http/servers/srv0/routes >/dev/null 2>&1; then
-  if ! command -v sudo >/dev/null 2>&1 || ! sudo curl -fsS --unix-socket "$CADDY_ADMIN_SOCKET" http://localhost/config/apps/http/servers/srv0/routes >/dev/null; then
-    echo "Caddy Admin API is not responsive through $CADDY_ADMIN_SOCKET." >&2
-    exit 1
-  fi
-fi
+routes_json="$(caddy_admin_routes)" || {
+  echo "Caddy Admin API is not responsive through $CADDY_ADMIN_SOCKET." >&2
+  exit 1
+}
 if ! $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T api test -S "$CADDY_ADMIN_SOCKET"; then
   echo "Caddy Admin socket is not visible inside the API container: $CADDY_ADMIN_SOCKET" >&2
   exit 1
@@ -133,6 +208,18 @@ fi
 if $DOCKER_BIN port mypaas-caddy-prod 2019/tcp 2>/dev/null | grep -q .; then
   echo "Caddy Admin TCP port 2019 must not be published." >&2
   exit 1
+fi
+
+echo "Checking an existing project route when available..."
+project_host="$(printf '%s' "$routes_json" | first_project_host "$PUBLIC_DOMAIN" || true)"
+if [[ -n "$project_host" ]]; then
+  curl -fsS -H "Host: $project_host" http://127.0.0.1/ >/dev/null
+  echo "Verified project route $project_host through local Caddy."
+elif [[ "$REQUIRE_PROJECT_ROUTE" == "true" ]]; then
+  echo "No existing project route was found in Caddy while REQUIRE_PROJECT_ROUTE=true." >&2
+  exit 1
+else
+  echo "No existing project route found; project-route verification skipped."
 fi
 
 echo "Checking CLI binary inside API container..."
