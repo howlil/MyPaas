@@ -21,6 +21,8 @@ import urllib.request
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from fixture_ref import FixtureRefError, resolve_fixture_ref
+
 TERMINAL_DEPLOYMENT_STATES = {"running", "failed", "stopped", "rolled_back"}
 FIXTURES = (
     {
@@ -142,14 +144,14 @@ def safe_sha(value: str) -> str:
     return value[:12] or "unknown"
 
 
-def project_payload(index: int, prefix: str, fixture_repo: str, fixture_ref: str) -> dict[str, Any]:
+def project_payload(index: int, prefix: str, fixture_repo: str, fixture_branch: str) -> dict[str, Any]:
     fixture = FIXTURES[index % len(FIXTURES)]
     suffix = f"{index + 1:03d}-{fixture['kind']}"
     payload: dict[str, Any] = {
         "name": f"{prefix}-{suffix}",
         "sourceType": "git",
         "repoUrl": fixture_repo,
-        "branch": fixture_ref,
+        "branch": fixture_branch,
         "deployMode": fixture["deployMode"],
         "resourceProfile": fixture["resourceProfile"],
         "appPort": fixture["appPort"],
@@ -182,11 +184,11 @@ def run_one(
     index: int,
     prefix: str,
     fixture_repo: str,
-    fixture_ref: str,
+    fixture_branch: str,
     deploy_timeout: float,
     poll_seconds: float,
 ) -> ProjectResult:
-    payload = project_payload(index, prefix, fixture_repo, fixture_ref)
+    payload = project_payload(index, prefix, fixture_repo, fixture_branch)
     result = ProjectResult(index=index + 1, fixture=str(payload["deployMode"]), name=str(payload["name"]))
     started = time.monotonic()
     try:
@@ -314,6 +316,8 @@ def markdown_report(report: dict[str, Any]) -> str:
         f"- Run ID: `{report['runId']}`",
         f"- Git SHA: `{report['gitSha']}`",
         f"- Target: `{report['baseUrl']}`",
+        f"- Fixture branch: `{report.get('fixtureBranch', report['fixtureRef'])}`",
+        f"- Fixture resolved SHA: `{report.get('fixtureResolvedSha', 'unknown')}`",
         f"- Started: `{report['startedAt']}`",
         f"- Finished: `{report['finishedAt']}`",
         f"- Overall: **{'PASS' if report['pass'] else 'FAIL'}**",
@@ -349,7 +353,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url", default=os.getenv("MYPAAS_BETA_BASE_URL", ""))
     parser.add_argument("--token", default=os.getenv("MYPAAS_API_TOKEN", ""))
     parser.add_argument("--fixture-repo", default=os.getenv("MYPAAS_BETA_FIXTURE_REPO", "https://github.com/nabilrn/MyPaas"))
-    parser.add_argument("--fixture-ref", default=os.getenv("MYPAAS_BETA_FIXTURE_REF", "main"))
+    parser.add_argument("--fixture-ref", default=os.getenv("MYPAAS_BETA_FIXTURE_REF", "main"), help="immutable SHA or branch identity to verify")
+    parser.add_argument("--fixture-branch", default=os.getenv("MYPAAS_BETA_FIXTURE_BRANCH", ""), help="optional clonable branch; required only when auto-resolution is ambiguous")
     parser.add_argument("--git-sha", default=os.getenv("MYPAAS_BETA_GIT_SHA", "unknown"))
     parser.add_argument("--counts", default="10,25,50")
     parser.add_argument("--parallel", type=int, default=2)
@@ -378,6 +383,7 @@ def main(argv: list[str] | None = None) -> int:
             "fixtures": list(FIXTURES),
             "fixtureRepo": args.fixture_repo,
             "fixtureRef": args.fixture_ref,
+            "fixtureBranch": args.fixture_branch or "<auto-resolve-before-run>",
             "parallel": args.parallel,
             "destructive": True,
         }, indent=2))
@@ -388,6 +394,11 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--base-url or MYPAAS_BETA_BASE_URL is required")
     if not args.token:
         raise SystemExit("--token or MYPAAS_API_TOKEN is required")
+
+    try:
+        fixture_ref = resolve_fixture_ref(args.fixture_repo, args.fixture_ref, args.fixture_branch)
+    except FixtureRefError as exc:
+        raise SystemExit(f"fixture ref preflight failed: {exc}") from exc
 
     started_at = utc_now()
     stamp = started_at.replace(":", "").replace("-", "")
@@ -415,7 +426,7 @@ def main(argv: list[str] | None = None) -> int:
                     index,
                     prefix,
                     args.fixture_repo,
-                    args.fixture_ref,
+                    fixture_ref.branch,
                     args.deploy_timeout,
                     args.poll_seconds,
                 )
@@ -441,13 +452,15 @@ def main(argv: list[str] | None = None) -> int:
         blocked.append("SSH Docker/cache attribution probe was not available")
 
     report = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "kind": "perf-many-projects",
         "runId": run_id,
         "gitSha": args.git_sha,
         "baseUrl": args.base_url,
         "fixtureRepo": args.fixture_repo,
-        "fixtureRef": args.fixture_ref,
+        "fixtureRef": fixture_ref.requested_ref,
+        "fixtureBranch": fixture_ref.branch,
+        "fixtureResolvedSha": fixture_ref.resolved_sha,
         "startedAt": started_at,
         "finishedAt": utc_now(),
         "thresholds": {"maxFailureRate": args.max_failure_rate, "maxP95Seconds": args.max_p95_seconds},
