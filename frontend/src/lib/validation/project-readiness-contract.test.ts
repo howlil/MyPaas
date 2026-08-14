@@ -30,7 +30,7 @@ describe('Create Project runtime readiness contract', () => {
 		expect(result).toEqual({
 			ready: false,
 			state: 'Analyzing deployment',
-			reason: 'Runtime analysis must finish before this project can be created'
+			reason: 'MyPaas is analyzing the selected source'
 		});
 	});
 
