@@ -18,6 +18,8 @@ DOCKER_BIN="${DOCKER_BIN:-docker}"
 COMPOSE_BIN="${COMPOSE_BIN:-$DOCKER_BIN compose}"
 API_IMAGE_REPO="${MYPAAS_API_IMAGE_REPO:-ghcr.io/nabilrn/mypaas-api}"
 DASHBOARD_IMAGE_REPO="${MYPAAS_DASHBOARD_IMAGE_REPO:-ghcr.io/nabilrn/mypaas-dashboard}"
+EXPLICIT_BUILD_SHA_SET="${MYPAAS_BUILD_SHA+x}"
+EXPLICIT_BUILD_SHA="${MYPAAS_BUILD_SHA:-}"
 
 cd "$ROOT_DIR"
 
@@ -75,6 +77,17 @@ if [[ -z "${MYPAAS_IMAGE_TAG:-}" && -d "$ROOT_DIR/.git" ]]; then
   export MYPAAS_IMAGE_TAG
   echo "Using MyPaas image tag ${MYPAAS_IMAGE_TAG:0:12} from the current checkout."
 fi
+
+# Build identity is derived from the immutable release tag by default. The
+# updater overrides it only during rollback, when the runtime image tag is a
+# temporary rollback-* tag but the owner-facing identity must remain the Git SHA
+# that produced those images.
+if [[ -n "$EXPLICIT_BUILD_SHA_SET" ]]; then
+  MYPAAS_BUILD_SHA="$EXPLICIT_BUILD_SHA"
+else
+  MYPAAS_BUILD_SHA="${MYPAAS_IMAGE_TAG:-unknown}"
+fi
+export MYPAAS_BUILD_SHA
 
 if [[ -n "${MYPAAS_IMAGE_TAG:-}" ]]; then
   echo "Pulling MyPaas release images for ${MYPAAS_IMAGE_TAG:0:12}..."
