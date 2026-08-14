@@ -1,0 +1,25 @@
+services:
+  app:
+    build: .
+    expose:
+      - "8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: beta
+      POSTGRES_USER: beta
+      POSTGRES_HOST_AUTH_METHOD: trust
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U beta -d beta"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    volumes:
+      - beta-data:/var/lib/postgresql/data
+
+volumes:
+  beta-data:
