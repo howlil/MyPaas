@@ -142,9 +142,13 @@ reconcile_statd() {
 
 verify_stack() {
   local docker_cmd="$1"
+  local expected_build_sha="${2:-}"
+  local expected_image_tag="${3:-$expected_build_sha}"
   local attempt
   for ((attempt = 1; attempt <= VERIFY_ATTEMPTS; attempt++)); do
     if DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" ENV_FILE="$ENV_FILE" COMPOSE_FILE="$COMPOSE_FILE" \
+      EXPECTED_BUILD_SHA="$expected_build_sha" EXPECTED_IMAGE_TAG="$expected_image_tag" \
+      REQUIRE_PROJECT_ROUTE="${AUTO_UPDATE_REQUIRE_PROJECT_ROUTE:-false}" \
       bash "$ROOT_DIR/scripts/verify-production.sh" >/dev/null 2>&1; then
       return 0
     fi
@@ -161,9 +165,9 @@ redeploy_current_for_env_drift() {
   api_socket="$(container_env_value "$docker_cmd" mypaas-api STATD_SOCKET)"
   if [[ -n "$desired_socket" && "$api_socket" != "$desired_socket" ]]; then
     log "API runtime environment is missing the reconciled STATD_SOCKET; recreating the current stack"
-    MYPAAS_IMAGE_TAG="$current_sha" DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" \
+    MYPAAS_IMAGE_TAG="$current_sha" MYPAAS_BUILD_SHA="$current_sha" DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" \
       ENV_FILE="$ENV_FILE" COMPOSE_FILE="$COMPOSE_FILE" bash "$ROOT_DIR/scripts/deploy-to-vm.sh"
-    verify_stack "$docker_cmd" || die "current MyPaas stack failed verification after STATD_SOCKET reconciliation"
+    verify_stack "$docker_cmd" "$current_sha" "$current_sha" || die "current MyPaas stack failed verification after STATD_SOCKET reconciliation"
   fi
 }
 
@@ -234,10 +238,10 @@ main() {
   local deploy_ok=true
   if ! reconcile_statd; then
     deploy_ok=false
-  elif ! MYPAAS_IMAGE_TAG="$target_sha" DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" \
+  elif ! MYPAAS_IMAGE_TAG="$target_sha" MYPAAS_BUILD_SHA="$target_sha" DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" \
     ENV_FILE="$ENV_FILE" COMPOSE_FILE="$COMPOSE_FILE" bash "$ROOT_DIR/scripts/deploy-to-vm.sh"; then
     deploy_ok=false
-  elif ! verify_stack "$docker_cmd"; then
+  elif ! verify_stack "$docker_cmd" "$target_sha" "$target_sha"; then
     deploy_ok=false
   fi
 
@@ -245,14 +249,22 @@ main() {
     log "Update failed; restoring checkout ${current_sha:0:12}"
     git_repo reset --hard "$current_sha"
     restore_checkout_owner
+    local rollback_verified=false
     if [[ "$rollback_ready" == "true" ]]; then
-      log "Attempting best-effort runtime rollback"
-      MYPAAS_IMAGE_TAG="$rollback_tag" DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" \
-        ENV_FILE="$ENV_FILE" COMPOSE_FILE="$COMPOSE_FILE" bash "$ROOT_DIR/scripts/deploy-to-vm.sh" || true
+      log "Attempting runtime rollback from verified local images"
+      if MYPAAS_IMAGE_TAG="$rollback_tag" MYPAAS_BUILD_SHA="$current_sha" MYPAAS_SKIP_IMAGE_PULL=true \
+        DOCKER_BIN="$docker_cmd" COMPOSE_BIN="$docker_cmd compose" ENV_FILE="$ENV_FILE" COMPOSE_FILE="$COMPOSE_FILE" \
+        bash "$ROOT_DIR/scripts/deploy-to-vm.sh" \
+        && verify_stack "$docker_cmd" "$current_sha" "$rollback_tag"; then
+        rollback_verified=true
+      fi
     else
       printf 'WARNING: previous runtime images were not available for automatic rollback.\n' >&2
     fi
-    die "MyPaas update to ${target_sha:0:12} failed"
+    if [[ "$rollback_verified" == "true" ]]; then
+      die "MyPaas update to ${target_sha:0:12} failed; previous runtime ${current_sha:0:12} was restored and verified"
+    fi
+    die "MyPaas update to ${target_sha:0:12} failed and the previous runtime could not be verified after rollback"
   fi
 
   log "MyPaas updated successfully to ${target_sha:0:12}"
