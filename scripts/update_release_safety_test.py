@@ -1,0 +1,49 @@
+import pathlib
+import unittest
+
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+class UpdateReleaseSafetyContractTest(unittest.TestCase):
+    def text(self, path):
+        return (ROOT / path).read_text(encoding="utf-8")
+
+    def test_production_compose_exposes_build_identity(self):
+        compose = self.text("docker-compose.prod.yml")
+        self.assertIn("MYPAAS_BUILD_SHA: ${MYPAAS_BUILD_SHA:-unknown}", compose)
+        self.assertIn("ghcr.io/nabilrn/mypaas-api:${MYPAAS_IMAGE_TAG:-latest}", compose)
+        self.assertIn("ghcr.io/nabilrn/mypaas-dashboard:${MYPAAS_IMAGE_TAG:-latest}", compose)
+
+    def test_deploy_supports_local_rollback_without_remote_pull(self):
+        deploy = self.text("scripts/deploy-to-vm.sh")
+        self.assertIn('SKIP_IMAGE_PULL="${MYPAAS_SKIP_IMAGE_PULL:-false}"', deploy)
+        self.assertIn('image inspect "$API_IMAGE_REPO:$MYPAAS_IMAGE_TAG"', deploy)
+        self.assertIn('image inspect "$DASHBOARD_IMAGE_REPO:$MYPAAS_IMAGE_TAG"', deploy)
+        self.assertIn('if [[ "$SKIP_IMAGE_PULL" != "true" ]]', deploy)
+
+    def test_updater_verifies_target_and_restored_runtime(self):
+        updater = self.text("scripts/update-vm.sh")
+        self.assertIn('verify_stack "$docker_cmd" "$target_sha" "$target_sha"', updater)
+        self.assertIn('MYPAAS_SKIP_IMAGE_PULL=true', updater)
+        self.assertIn('MYPAAS_BUILD_SHA="$current_sha"', updater)
+        self.assertIn('verify_stack "$docker_cmd" "$current_sha" "$rollback_tag"', updater)
+        self.assertIn('previous runtime could not be verified after rollback', updater)
+
+    def test_post_update_verifier_checks_dashboard_identity_and_project_route(self):
+        verify = self.text("scripts/verify-production.sh")
+        self.assertIn("Checking dashboard reachability", verify)
+        self.assertIn("EXPECTED_BUILD_SHA", verify)
+        self.assertIn("EXPECTED_IMAGE_TAG", verify)
+        self.assertIn("MYPAAS_BUILD_SHA", verify)
+        self.assertIn("first_project_host", verify)
+        self.assertIn("REQUIRE_PROJECT_ROUTE", verify)
+
+    def test_owner_settings_exposes_build_sha(self):
+        settings = self.text("backend/internal/settings/handler.go")
+        self.assertIn('res["build_sha"]', settings)
+        self.assertIn('os.Getenv("MYPAAS_BUILD_SHA")', settings)
+
+
+if __name__ == "__main__":
+    unittest.main()
