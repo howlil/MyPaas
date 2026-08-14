@@ -19,6 +19,8 @@ import uuid
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from fixture_ref import FixtureRefError, resolve_fixture_ref
+
 TERMINAL = {"running", "failed", "stopped", "rolled_back"}
 FIXTURES = (
     {
@@ -125,13 +127,13 @@ def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def fixture_payload(index: int, prefix: str, repo: str, ref: str) -> dict[str, Any]:
+def fixture_payload(index: int, prefix: str, repo: str, branch: str) -> dict[str, Any]:
     fixture = FIXTURES[index % len(FIXTURES)]
     payload: dict[str, Any] = {
         "name": f"{prefix}-{index + 1:02d}-{fixture['kind']}",
         "sourceType": "git",
         "repoUrl": repo,
-        "branch": ref,
+        "branch": branch,
         "deployMode": fixture["deployMode"],
         "resourceProfile": fixture["resourceProfile"],
         "appPort": fixture["appPort"],
@@ -167,8 +169,8 @@ def project_from_response(row: dict[str, Any], kind: str, should_fail: bool = Fa
     )
 
 
-def create_projects(client: ApiClient, count: int, prefix: str, repo: str, ref: str, run_id: str, parallel: int) -> list[ManagedProject]:
-    payloads = [(fixture_payload(i, prefix, repo, ref), FIXTURES[i % len(FIXTURES)]["kind"], False) for i in range(count)]
+def create_projects(client: ApiClient, count: int, prefix: str, repo: str, branch: str, run_id: str, parallel: int) -> list[ManagedProject]:
+    payloads = [(fixture_payload(i, prefix, repo, branch), FIXTURES[i % len(FIXTURES)]["kind"], False) for i in range(count)]
     payloads.append((failing_payload(prefix, run_id), "intentional-failure", True))
 
     def create(item: tuple[dict[str, Any], str, bool]) -> ManagedProject:
@@ -339,6 +341,8 @@ def markdown_report(report: dict[str, Any]) -> str:
         f"- Run ID: `{report['runId']}`",
         f"- Git SHA: `{report['gitSha']}`",
         f"- Target: `{report['baseUrl']}`",
+        f"- Fixture branch: `{report.get('fixtureBranch', report.get('fixtureRef', 'unknown'))}`",
+        f"- Fixture resolved SHA: `{report.get('fixtureResolvedSha', 'unknown')}`",
         f"- Result: **{'PASS' if report['pass'] else 'FAIL'}**",
         "",
         "| Phase | Project | Expected | Actual | Seconds |",
@@ -373,7 +377,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--base-url", default=os.getenv("MYPAAS_BETA_BASE_URL", ""))
     p.add_argument("--token", default=os.getenv("MYPAAS_API_TOKEN", ""))
     p.add_argument("--fixture-repo", default=os.getenv("MYPAAS_BETA_FIXTURE_REPO", "https://github.com/nabilrn/MyPaas"))
-    p.add_argument("--fixture-ref", default=os.getenv("MYPAAS_BETA_FIXTURE_REF", "main"))
+    p.add_argument("--fixture-ref", default=os.getenv("MYPAAS_BETA_FIXTURE_REF", "main"), help="immutable SHA or branch identity to verify")
+    p.add_argument("--fixture-branch", default=os.getenv("MYPAAS_BETA_FIXTURE_BRANCH", ""), help="optional clonable branch; required only when auto-resolution is ambiguous")
     p.add_argument("--git-sha", default=os.getenv("MYPAAS_BETA_GIT_SHA", "unknown"))
     p.add_argument("--public-domain", default=os.getenv("MYPAAS_BETA_PUBLIC_DOMAIN", ""))
     p.add_argument("--project-count", type=int, default=4)
@@ -397,6 +402,9 @@ def main(argv: list[str] | None = None) -> int:
             "controlledProjects": args.project_count,
             "intentionalFailureProjects": 1,
             "phases": ["concurrent-create", "concurrent-deploy", "concurrent-redeploy"],
+            "fixtureRepo": args.fixture_repo,
+            "fixtureRef": args.fixture_ref,
+            "fixtureBranch": args.fixture_branch or "<auto-resolve-before-run>",
             "webhookBurst": args.webhook_burst,
             "destructive": True,
         }, indent=2))
@@ -406,6 +414,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.base_url or not args.token:
         raise SystemExit("--base-url and --token (or matching env vars) are required")
 
+    try:
+        fixture_ref = resolve_fixture_ref(args.fixture_repo, args.fixture_ref, args.fixture_branch)
+    except FixtureRefError as exc:
+        raise SystemExit(f"fixture ref preflight failed: {exc}") from exc
+
     started = utc_now()
     run_id = f"{started.replace(':', '').replace('-', '')}-{''.join(c for c in args.git_sha if c.isalnum())[:12] or 'unknown'}"
     prefix = f"beta-resilience-{run_id.lower()[:18]}"
@@ -414,7 +427,7 @@ def main(argv: list[str] | None = None) -> int:
     blocked: list[str] = []
 
     protected_before = [probe_url(url) for url in args.protect_url]
-    projects = create_projects(client, args.project_count, prefix, args.fixture_repo, args.fixture_ref, run_id, args.parallel)
+    projects = create_projects(client, args.project_count, prefix, args.fixture_repo, fixture_ref.branch, run_id, args.parallel)
     baseline = deploy_concurrently(client, projects, "initial-deploy", args.parallel, args.deploy_timeout, args.poll_seconds)
     healthy = [p for p in projects if not p.should_fail]
     redeploy = deploy_concurrently(client, healthy, "redeploy", args.parallel, args.deploy_timeout, args.poll_seconds)
@@ -423,7 +436,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.webhook_burst:
         target = next((p for p in healthy if p.webhook_secret), None)
         if target:
-            webhook_results = send_webhook_burst(client, target, args.fixture_ref, args.webhook_burst, args.parallel)
+            webhook_results = send_webhook_burst(client, target, fixture_ref.branch, args.webhook_burst, args.parallel)
         else:
             blocked.append("webhook burst requested but no fixture project exposed a webhook secret")
 
@@ -447,11 +460,15 @@ def main(argv: list[str] | None = None) -> int:
             failures.append(f"pre-existing protected route regressed: {after.get('url')}")
 
     report = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "kind": "resilience-concurrent-deploys",
         "runId": run_id,
         "gitSha": args.git_sha,
         "baseUrl": args.base_url,
+        "fixtureRepo": args.fixture_repo,
+        "fixtureRef": fixture_ref.requested_ref,
+        "fixtureBranch": fixture_ref.branch,
+        "fixtureResolvedSha": fixture_ref.resolved_sha,
         "startedAt": started,
         "finishedAt": utc_now(),
         "projects": [asdict(p) | {"webhook_secret": "<redacted>"} for p in projects],
