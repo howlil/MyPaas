@@ -116,6 +116,14 @@ class InstallConfigTest(unittest.TestCase):
         self.assertIn("METRICS_USERNAME: ${METRICS_USERNAME:-}", api)
         self.assertIn("METRICS_PASSWORD: ${METRICS_PASSWORD:-}", api)
 
+    def test_production_compose_passes_quota_config_to_api(self) -> None:
+        compose = (ROOT_DIR / "docker-compose.prod.yml").read_text(encoding="utf-8")
+        api = compose.split("  api:\n", 1)[1].split("\n  dashboard:\n", 1)[0]
+
+        self.assertIn("USER_RAM_QUOTA_GB: ${USER_RAM_QUOTA_GB:-6}", api)
+        self.assertIn("USER_CPU_QUOTA: ${USER_CPU_QUOTA:-3}", api)
+        self.assertIn("MAX_PROJECTS: ${MAX_PROJECTS:-20}", api)
+
     def test_production_compose_separates_control_project_and_routing_networks(self) -> None:
         compose = (ROOT_DIR / "docker-compose.prod.yml").read_text(encoding="utf-8")
         postgres = compose.split("  postgres:\n", 1)[1].split("\n  api:\n", 1)[0]
