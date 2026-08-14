@@ -1,0 +1,26 @@
+services:
+  app:
+    image: nginx:1.27-alpine
+    expose:
+      - "80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: appdb
+      MYSQL_USER: app
+      MYSQL_PASSWORD: fixture-only-password
+      MYSQL_ROOT_PASSWORD: fixture-only-root-password
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uapp -pfixture-only-password --silent"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    volumes:
+      - data:/var/lib/mysql
+
+volumes:
+  data:
