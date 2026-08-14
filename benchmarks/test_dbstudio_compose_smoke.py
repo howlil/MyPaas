@@ -18,6 +18,15 @@ class DBStudioComposeSmokeTest(unittest.TestCase):
         self.assertEqual(payload["appPort"], 80)
         self.assertEqual(payload["composeFilePath"], "compose.yml")
 
+    def test_generated_project_names_fit_backend_limit(self):
+        prefix = dbstudio_compose_smoke.project_prefix("20260814T143857Z")
+        names = [
+            dbstudio_compose_smoke.fixture_payload(engine, "fixtures", prefix, "https://github.com/example/repo", "main")["name"]
+            for engine in ("postgres", "mysql", "mariadb")
+        ]
+
+        self.assertTrue(all(len(name) <= 30 for name in names), names)
+
     def test_status_requires_connected_expected_driver_and_read_only_default(self):
         status = {
             "configured": True,
