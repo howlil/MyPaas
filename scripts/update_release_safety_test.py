@@ -30,6 +30,12 @@ class UpdateReleaseSafetyContractTest(unittest.TestCase):
         self.assertIn('verify_stack "$docker_cmd" "$current_sha" "$rollback_tag"', updater)
         self.assertIn('previous runtime could not be verified after rollback', updater)
 
+    def test_publish_workflow_keeps_legacy_rollback_aliases_available(self):
+        workflow = self.text(".github/workflows/docker-publish.yml")
+        self.assertIn('rollback_tag=rollback-${GITHUB_SHA:0:12}', workflow)
+        self.assertIn('${{ env.REGISTRY }}/nabilrn/mypaas-api:${{ steps.release.outputs.rollback_tag }}', workflow)
+        self.assertIn('${{ env.REGISTRY }}/nabilrn/mypaas-dashboard:${{ steps.release.outputs.rollback_tag }}', workflow)
+
     def test_post_update_verifier_checks_dashboard_identity_and_project_route(self):
         verify = self.text("scripts/verify-production.sh")
         self.assertIn("Checking dashboard reachability", verify)
