@@ -19,6 +19,16 @@ class BetaResilienceTest(unittest.TestCase):
         self.assertEqual(payload["sourceType"], "registry")
         self.assertIn("intentionally-missing", payload["imageRef"])
 
+    def test_generated_project_names_fit_backend_limit(self):
+        prefix = beta_resilience.project_prefix("20260814T143705Z-91ab957ba072")
+        names = [
+            beta_resilience.fixture_payload(0, prefix, "https://github.com/example/repo", "main")["name"],
+            beta_resilience.fixture_payload(1, prefix, "https://github.com/example/repo", "main")["name"],
+            beta_resilience.failing_payload(prefix, "20260814T143705Z-91ab957ba072")["name"],
+        ]
+
+        self.assertTrue(all(len(name) <= 30 for name in names), names)
+
     def test_duplicate_ports_are_reported(self):
         rows = [
             beta_resilience.ManagedProject("a", "dockerfile", "1", "a", "", 3001),
