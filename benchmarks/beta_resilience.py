@@ -185,6 +185,11 @@ def create_projects(client: ApiClient, count: int, prefix: str, repo: str, branc
     return rows
 
 
+def project_prefix(run_id: str) -> str:
+    compact = "".join(c for c in run_id.lower() if c.isalnum())
+    return f"br-{(compact or 'run')[:7]}"
+
+
 def wait_deployment(client: ApiClient, deployment_id: str, timeout: float, poll: float) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     last: dict[str, Any] = {}
@@ -421,7 +426,7 @@ def main(argv: list[str] | None = None) -> int:
 
     started = utc_now()
     run_id = f"{started.replace(':', '').replace('-', '')}-{''.join(c for c in args.git_sha if c.isalnum())[:12] or 'unknown'}"
-    prefix = f"beta-resilience-{run_id.lower()[:18]}"
+    prefix = project_prefix(run_id)
     output = pathlib.Path(args.output or f"artifacts/beta-readiness/{run_id}/resilience-concurrent-deploys")
     client = ApiClient(args.base_url, args.token)
     blocked: list[str] = []
