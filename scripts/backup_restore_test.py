@@ -2,6 +2,7 @@ import importlib.util
 import io
 import json
 import pathlib
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ SCRIPT = pathlib.Path(__file__).with_name("backup-restore.py")
 SPEC = importlib.util.spec_from_file_location("backup_restore", SCRIPT)
 backup_restore = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
+sys.modules[SPEC.name] = backup_restore
 SPEC.loader.exec_module(backup_restore)
 
 
