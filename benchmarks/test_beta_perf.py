@@ -19,6 +19,7 @@ class BetaPerfTest(unittest.TestCase):
         self.assertEqual(static["deployMode"], "static")
         self.assertEqual(dockerfile["deployMode"], "dockerfile")
         self.assertEqual(compose["deployMode"], "compose")
+        self.assertEqual(compose["branch"], "main")
         self.assertEqual(compose["mainService"], "app")
         self.assertEqual(compose["composeFilePath"], "compose.yml")
 
@@ -47,6 +48,9 @@ class BetaPerfTest(unittest.TestCase):
             "runId": "run-1",
             "gitSha": "abc123",
             "baseUrl": "https://mypaas.example",
+            "fixtureRef": "abc123",
+            "fixtureBranch": "test/beta-readiness-candidate",
+            "fixtureResolvedSha": "abc123",
             "startedAt": "2026-08-14T00:00:00Z",
             "finishedAt": "2026-08-14T00:01:00Z",
             "pass": True,
@@ -65,6 +69,7 @@ class BetaPerfTest(unittest.TestCase):
         }
         text = beta_perf.markdown_report(report)
         self.assertIn("MyPaas many-project performance report", text)
+        self.assertIn("Fixture branch", text)
         self.assertIn("| 10 | 10 | 0 | 0.000 | 4.20 | PASS |", text)
 
 
