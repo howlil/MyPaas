@@ -133,6 +133,11 @@ func (s *Service) runScheduled(parent context.Context) {
 		} else {
 			slog.Info("managed image cleanup completed", "until", s.cfg.ImageCleanupUntil)
 		}
+		if err := s.docker.CleanupBuildCache(ctx, s.cfg.ImageCleanupUntil); err != nil {
+			slog.Warn("BuildKit cache cleanup failed", "error", err)
+		} else {
+			slog.Info("BuildKit cache cleanup completed", "until", s.cfg.ImageCleanupUntil)
+		}
 	}
 }
 
