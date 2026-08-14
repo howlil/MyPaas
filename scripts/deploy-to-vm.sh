@@ -18,6 +18,7 @@ DOCKER_BIN="${DOCKER_BIN:-docker}"
 COMPOSE_BIN="${COMPOSE_BIN:-$DOCKER_BIN compose}"
 API_IMAGE_REPO="${MYPAAS_API_IMAGE_REPO:-ghcr.io/nabilrn/mypaas-api}"
 DASHBOARD_IMAGE_REPO="${MYPAAS_DASHBOARD_IMAGE_REPO:-ghcr.io/nabilrn/mypaas-dashboard}"
+SKIP_IMAGE_PULL="${MYPAAS_SKIP_IMAGE_PULL:-false}"
 EXPLICIT_BUILD_SHA_SET="${MYPAAS_BUILD_SHA+x}"
 EXPLICIT_BUILD_SHA="${MYPAAS_BUILD_SHA:-}"
 
@@ -45,6 +46,11 @@ set +a
 : "${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}"
 : "${DOCKER_SOCKET:?DOCKER_SOCKET is required}"
 : "${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}"
+
+if [[ "$SKIP_IMAGE_PULL" != "true" && "$SKIP_IMAGE_PULL" != "false" ]]; then
+  echo "MYPAAS_SKIP_IMAGE_PULL must be true or false." >&2
+  exit 2
+fi
 
 SUDO=""
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
@@ -90,16 +96,28 @@ fi
 export MYPAAS_BUILD_SHA
 
 if [[ -n "${MYPAAS_IMAGE_TAG:-}" ]]; then
-  echo "Pulling MyPaas release images for ${MYPAAS_IMAGE_TAG:0:12}..."
-  if ! $DOCKER_BIN pull "$API_IMAGE_REPO:$MYPAAS_IMAGE_TAG"; then
-    echo "Missing API image $API_IMAGE_REPO:$MYPAAS_IMAGE_TAG." >&2
-    echo "Wait for the Docker publish workflow to finish, or set MYPAAS_IMAGE_TAG explicitly." >&2
-    exit 1
-  fi
-  if ! $DOCKER_BIN pull "$DASHBOARD_IMAGE_REPO:$MYPAAS_IMAGE_TAG"; then
-    echo "Missing dashboard image $DASHBOARD_IMAGE_REPO:$MYPAAS_IMAGE_TAG." >&2
-    echo "Wait for the Docker publish workflow to finish, or set MYPAAS_IMAGE_TAG explicitly." >&2
-    exit 1
+  if [[ "$SKIP_IMAGE_PULL" == "true" ]]; then
+    echo "Using verified local MyPaas images for ${MYPAAS_IMAGE_TAG:0:12}..."
+    if ! $DOCKER_BIN image inspect "$API_IMAGE_REPO:$MYPAAS_IMAGE_TAG" >/dev/null 2>&1; then
+      echo "Missing local API image $API_IMAGE_REPO:$MYPAAS_IMAGE_TAG." >&2
+      exit 1
+    fi
+    if ! $DOCKER_BIN image inspect "$DASHBOARD_IMAGE_REPO:$MYPAAS_IMAGE_TAG" >/dev/null 2>&1; then
+      echo "Missing local dashboard image $DASHBOARD_IMAGE_REPO:$MYPAAS_IMAGE_TAG." >&2
+      exit 1
+    fi
+  else
+    echo "Pulling MyPaas release images for ${MYPAAS_IMAGE_TAG:0:12}..."
+    if ! $DOCKER_BIN pull "$API_IMAGE_REPO:$MYPAAS_IMAGE_TAG"; then
+      echo "Missing API image $API_IMAGE_REPO:$MYPAAS_IMAGE_TAG." >&2
+      echo "Wait for the Docker publish workflow to finish, or set MYPAAS_IMAGE_TAG explicitly." >&2
+      exit 1
+    fi
+    if ! $DOCKER_BIN pull "$DASHBOARD_IMAGE_REPO:$MYPAAS_IMAGE_TAG"; then
+      echo "Missing dashboard image $DASHBOARD_IMAGE_REPO:$MYPAAS_IMAGE_TAG." >&2
+      echo "Wait for the Docker publish workflow to finish, or set MYPAAS_IMAGE_TAG explicitly." >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -122,8 +140,10 @@ $DOCKER_BIN run --rm \
   -database "$MIGRATE_DATABASE_URL" \
   up
 
-echo "Pulling and starting MyPaas..."
-$COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull
+echo "Starting MyPaas..."
+if [[ "$SKIP_IMAGE_PULL" != "true" ]]; then
+  $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull
+fi
 $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 
 echo "MyPaas production stack is starting. Run scripts/verify-production.sh after the containers settle."
