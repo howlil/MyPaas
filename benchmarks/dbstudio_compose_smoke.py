@@ -15,6 +15,8 @@ import urllib.request
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from fixture_ref import FixtureRefError, resolve_fixture_ref
+
 ENGINES = (
     ("postgres", "postgres", "benchmarks/fixtures/dbstudio/postgres"),
     ("mysql", "mysql", "benchmarks/fixtures/dbstudio/mysql"),
@@ -81,12 +83,12 @@ def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def fixture_payload(engine: str, base_directory: str, prefix: str, repo: str, ref: str) -> dict[str, Any]:
+def fixture_payload(engine: str, base_directory: str, prefix: str, repo: str, branch: str) -> dict[str, Any]:
     return {
         "name": f"{prefix}-{engine}",
         "sourceType": "git",
         "repoUrl": repo,
-        "branch": ref,
+        "branch": branch,
         "deployMode": "compose",
         "resourceProfile": "compose-main",
         "mainService": "app",
@@ -144,14 +146,14 @@ def run_engine(
     base_directory: str,
     prefix: str,
     repo: str,
-    ref: str,
+    branch: str,
     timeout: float,
     poll: float,
 ) -> EngineResult:
     result = EngineResult(engine=engine, expected_driver=expected_driver)
     started = time.monotonic()
     try:
-        project = client.request("POST", "/api/projects/", fixture_payload(engine, base_directory, prefix, repo, ref))
+        project = client.request("POST", "/api/projects/", fixture_payload(engine, base_directory, prefix, repo, branch))
         if not isinstance(project, dict) or not project.get("id"):
             raise SmokeError("project create response did not include an id")
         result.project_id = str(project["id"])
@@ -191,6 +193,8 @@ def markdown(report: dict[str, Any]) -> str:
         "",
         f"- Run ID: `{report['runId']}`",
         f"- Git SHA: `{report['gitSha']}`",
+        f"- Fixture branch: `{report.get('fixtureBranch', report['fixtureRef'])}`",
+        f"- Fixture resolved SHA: `{report.get('fixtureResolvedSha', 'unknown')}`",
         f"- Result: **{'PASS' if report['pass'] else 'FAIL'}**",
         "",
         "| Engine | Deployment | Configured | Connected | Driver | Read-only default | Schemas | Result |",
@@ -224,7 +228,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--base-url", default=os.getenv("MYPAAS_BETA_BASE_URL", ""))
     p.add_argument("--token", default=os.getenv("MYPAAS_API_TOKEN", ""))
     p.add_argument("--fixture-repo", default=os.getenv("MYPAAS_BETA_FIXTURE_REPO", "https://github.com/nabilrn/MyPaas"))
-    p.add_argument("--fixture-ref", default=os.getenv("MYPAAS_BETA_FIXTURE_REF", "main"))
+    p.add_argument("--fixture-ref", default=os.getenv("MYPAAS_BETA_FIXTURE_REF", "main"), help="immutable SHA or branch identity to verify")
+    p.add_argument("--fixture-branch", default=os.getenv("MYPAAS_BETA_FIXTURE_BRANCH", ""), help="optional clonable branch; required only when auto-resolution is ambiguous")
     p.add_argument("--git-sha", default=os.getenv("MYPAAS_BETA_GIT_SHA", "unknown"))
     p.add_argument("--timeout", type=float, default=900)
     p.add_argument("--poll-seconds", type=float, default=3)
@@ -241,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
             "engines": [engine for engine, _, _ in ENGINES],
             "fixtureRepo": args.fixture_repo,
             "fixtureRef": args.fixture_ref,
+            "fixtureBranch": args.fixture_branch or "<auto-resolve-before-run>",
             "checks": ["deploy running", "db configured", "db connected", "driver", "writeAccess null", "schemas readable"],
             "destructive": True,
         }, indent=2))
@@ -250,23 +256,30 @@ def main(argv: list[str] | None = None) -> int:
     if not args.base_url or not args.token:
         raise SystemExit("--base-url and --token (or matching env vars) are required")
 
+    try:
+        fixture_ref = resolve_fixture_ref(args.fixture_repo, args.fixture_ref, args.fixture_branch)
+    except FixtureRefError as exc:
+        raise SystemExit(f"fixture ref preflight failed: {exc}") from exc
+
     started = utc_now()
     compact = started.replace(":", "").replace("-", "")
     prefix = f"beta-db-{compact.lower()[:15]}"
     run_id = f"{compact}-{''.join(c for c in args.git_sha if c.isalnum())[:12] or 'unknown'}"
     client = Client(args.base_url, args.token)
     results = [
-        run_engine(client, engine, driver, directory, prefix, args.fixture_repo, args.fixture_ref, args.timeout, args.poll_seconds)
+        run_engine(client, engine, driver, directory, prefix, args.fixture_repo, fixture_ref.branch, args.timeout, args.poll_seconds)
         for engine, driver, directory in ENGINES
     ]
     report = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "kind": "dbstudio-compose-smoke",
         "runId": run_id,
         "gitSha": args.git_sha,
         "baseUrl": args.base_url,
         "fixtureRepo": args.fixture_repo,
-        "fixtureRef": args.fixture_ref,
+        "fixtureRef": fixture_ref.requested_ref,
+        "fixtureBranch": fixture_ref.branch,
+        "fixtureResolvedSha": fixture_ref.resolved_sha,
         "startedAt": started,
         "finishedAt": utc_now(),
         "engines": [asdict(result) for result in results],
