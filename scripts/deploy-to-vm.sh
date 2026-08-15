@@ -136,6 +136,13 @@ until $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T postgres pg
   sleep 2
 done
 
+if [[ -f "/tmp/mypaas-restore.sql.gz" ]]; then
+  echo "Found backup file, restoring database..."
+  gzip -d -c /tmp/mypaas-restore.sql.gz | $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T -i postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+  rm -f /tmp/mypaas-restore.sql.gz
+  echo "Backup restored successfully."
+fi
+
 MIGRATE_DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
 
 echo "Running migrations..."
