@@ -40,6 +40,9 @@
 	$: hostMemoryUsed = hostStats?.memory ? Math.max(0, hostStats.memory.total_bytes - hostStats.memory.available_bytes) : 0;
 	$: hostStorageUsed = hostStats?.storage ? Math.max(0, hostStats.storage.total_bytes - hostStats.storage.available_bytes) : 0;
 
+	$: safeProjectLimit = hostMemoryTotal > 0 ? Math.floor(hostMemoryTotal / (1024 * 1024 * 1024) * 10) : null;
+	$: platformLimitsDescription = `Guardrails enforced for project ownership and aggregate resource allocation.${safeProjectLimit ? ` Based on this host's capacity, a safe limit is roughly ${safeProjectLimit} small projects.` : ''}`;
+
 	onMount(() => {
 		void loadSettings();
 	});
@@ -192,7 +195,7 @@
 			<LoaderCircle class="h-6 w-6 animate-spin motion-reduce:animate-none text-gray-500 dark:text-gray-400" aria-hidden="true" />
 		</div>
 	{:else}
-		<SectionPanel title="Platform limits" description="Guardrails enforced for project ownership and aggregate resource allocation.">
+		<SectionPanel title="Platform limits" description={platformLimitsDescription}>
 			<div class="grid gap-5 lg:grid-cols-3">
 				<label class="block" for="user_ram_quota_gb">
 					<span class="field-label">RAM quota per user</span>

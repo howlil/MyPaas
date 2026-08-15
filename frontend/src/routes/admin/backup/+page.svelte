@@ -96,39 +96,41 @@
 		</div>
 	{:else}
 		<SectionPanel title="S3 Automated Backup" description="Configure S3-compatible storage for automated daily backups.">
-			<div class="mb-6 rounded-md border border-gray-200 bg-gray-50 p-4 dark:border-neutral-800 dark:bg-neutral-900">
-				<h3 class="text-sm font-medium text-gray-900 dark:text-white">Cloudflare R2 Setup Guide</h3>
-				<div class="mt-2 space-y-1.5 text-sm text-gray-600 dark:text-gray-400">
-					<p>1. Go to Cloudflare Dashboard &rarr; <strong>R2 Object Storage</strong> and create a bucket.</p>
-					<p>2. Click <strong>Manage R2 API Tokens</strong> and create a token with <strong>Object Read &amp; Write</strong> permissions.</p>
-					<p>3. Copy the <strong>S3 Endpoint</strong> from the bucket settings (e.g., <code>https://&lt;account-id&gt;.r2.cloudflarestorage.com</code>).</p>
-					<p>4. Use Region <code>auto</code> unless you specified a specific jurisdiction.</p>
+			<div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.72fr)]">
+				<div class="h-max rounded-md border border-gray-200 p-4 text-sm text-gray-600 dark:border-neutral-800 dark:text-gray-300">
+					<p class="font-medium text-gray-950 dark:text-white">Cloudflare R2 Setup Guide</p>
+					<div class="mt-2 space-y-2 leading-6">
+						<p>1. Go to Cloudflare Dashboard &rarr; <strong>R2 Object Storage</strong> and create a bucket.</p>
+						<p>2. Click <strong>Manage R2 API Tokens</strong> and create a token with <strong>Object Read &amp; Write</strong> permissions.</p>
+						<p>3. Copy the <strong>S3 Endpoint</strong> from the bucket settings.</p>
+						<p>4. Use Region <code>auto</code> unless you specified a specific jurisdiction.</p>
+					</div>
 				</div>
-			</div>
-			<div class="grid gap-5 max-w-4xl sm:grid-cols-2">
-				<label class="block">
-					<span class="field-label">S3 Endpoint</span>
-					<input type="text" bind:value={s3Config.endpoint} class="field" placeholder="https://<account-id>.r2.cloudflarestorage.com" />
-				</label>
-				<label class="block">
-					<span class="field-label">Bucket</span>
-					<input type="text" bind:value={s3Config.bucket} class="field" placeholder="mypaas-backups" />
-				</label>
-				<label class="block">
-					<span class="field-label">Region</span>
-					<input type="text" bind:value={s3Config.region} class="field" placeholder="auto" />
-				</label>
-				<label class="block">
-					<span class="field-label">Access Key</span>
-					<input type="text" bind:value={s3Config.access_key} class="field" />
-				</label>
-				<label class="block sm:col-span-2">
-					<span class="field-label">Secret Key</span>
-					<input type="password" bind:value={s3Config.secret_key} class="field" />
-				</label>
-			</div>
-			<div class="mt-5 border-t border-gray-100 pt-4 dark:border-neutral-800">
-				<ActionButton variant="primary" size="sm" loading={savingS3} on:click={saveS3Config}>Save S3 Config</ActionButton>
+				<div class="space-y-4">
+					<div>
+						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="endpoint">S3 Endpoint</label>
+						<input id="endpoint" type="text" bind:value={s3Config.endpoint} class="field w-full font-mono text-sm" placeholder="https://<account-id>.r2.cloudflarestorage.com" />
+					</div>
+					<div>
+						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="bucket">Bucket</label>
+						<input id="bucket" type="text" bind:value={s3Config.bucket} class="field w-full font-mono text-sm" placeholder="mypaas-backups" />
+					</div>
+					<div>
+						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="region">Region</label>
+						<input id="region" type="text" bind:value={s3Config.region} class="field w-full font-mono text-sm" placeholder="auto" />
+					</div>
+					<div>
+						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="access-key">Access Key</label>
+						<input id="access-key" type="text" bind:value={s3Config.access_key} class="field w-full font-mono text-sm" />
+					</div>
+					<div>
+						<label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300" for="secret-key">Secret Key</label>
+						<input id="secret-key" type="password" bind:value={s3Config.secret_key} class="field w-full font-mono text-sm" />
+					</div>
+					<div class="pt-2">
+						<ActionButton variant="primary" loading={savingS3} on:click={saveS3Config}>Save S3 Config</ActionButton>
+					</div>
+				</div>
 			</div>
 		</SectionPanel>
 
