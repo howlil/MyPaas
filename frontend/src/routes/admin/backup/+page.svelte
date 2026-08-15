@@ -105,26 +105,24 @@
 					<p>4. Use Region <code>auto</code> unless you specified a specific jurisdiction.</p>
 				</div>
 			</div>
-			<div class="space-y-4 max-w-2xl">
+			<div class="grid gap-5 max-w-4xl sm:grid-cols-2">
 				<label class="block">
 					<span class="field-label">S3 Endpoint</span>
-					<input type="text" bind:value={s3Config.endpoint} class="field" placeholder="https://s3.eu-central-1.amazonaws.com" />
+					<input type="text" bind:value={s3Config.endpoint} class="field" placeholder="https://<account-id>.r2.cloudflarestorage.com" />
 				</label>
 				<label class="block">
 					<span class="field-label">Bucket</span>
 					<input type="text" bind:value={s3Config.bucket} class="field" placeholder="mypaas-backups" />
 				</label>
-				<div class="grid grid-cols-2 gap-4">
-					<label class="block">
-						<span class="field-label">Region</span>
-						<input type="text" bind:value={s3Config.region} class="field" placeholder="eu-central-1" />
-					</label>
-					<label class="block">
-						<span class="field-label">Access Key</span>
-						<input type="text" bind:value={s3Config.access_key} class="field" />
-					</label>
-				</div>
 				<label class="block">
+					<span class="field-label">Region</span>
+					<input type="text" bind:value={s3Config.region} class="field" placeholder="auto" />
+				</label>
+				<label class="block">
+					<span class="field-label">Access Key</span>
+					<input type="text" bind:value={s3Config.access_key} class="field" />
+				</label>
+				<label class="block sm:col-span-2">
 					<span class="field-label">Secret Key</span>
 					<input type="password" bind:value={s3Config.secret_key} class="field" />
 				</label>
