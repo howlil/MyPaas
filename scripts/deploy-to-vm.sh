@@ -32,8 +32,8 @@ if [[ -f "/tmp/mypaas-restore.tar.gz" ]]; then
   tar -xzf /tmp/mypaas-restore.tar.gz -C "$TMP_EXTRACT"
   
   if [[ -f "$TMP_EXTRACT/.env" ]]; then
-    mv "$TMP_EXTRACT/.env" "$ENV_FILE"
-    echo "Restored .env from backup."
+    cat "$TMP_EXTRACT/.env" >> "$ENV_FILE"
+    echo "Restored .env from backup (merged)."
   fi
   
   if [[ -f "$TMP_EXTRACT/database.sql" ]]; then
