@@ -400,25 +400,29 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
       </div>
       <div class="header-copy">
         <h1>Set up MyPaas</h1>
-        <p>Complete four short steps. Nothing is saved until the final review, and the terminal installer continues automatically when you finish.</p>
+        <p>Complete five short steps. Nothing is saved until the final review, and the terminal installer continues automatically when you finish.</p>
       </div>
     </header>
     <div class="layout">
       <aside class="panel stepper" aria-label="Install steps" role="list">
         <div class="step-tab active" data-progress="0" role="listitem" aria-current="step">
           <span class="step-number">1</span>
-          <span><span class="step-title">Domain</span><span class="step-body">Where MyPaas lives</span></span>
+          <span><span class="step-title">Restore</span><span class="step-body">Upload backup</span></span>
         </div>
         <div class="step-tab" data-progress="1" role="listitem">
           <span class="step-number">2</span>
-          <span><span class="step-title">GitHub login</span><span class="step-body">Owner sign-in</span></span>
+          <span><span class="step-title">Domain</span><span class="step-body">Where MyPaas lives</span></span>
         </div>
         <div class="step-tab" data-progress="2" role="listitem">
           <span class="step-number">3</span>
-          <span><span class="step-title">Routing</span><span class="step-body">Cloudflare tunnel</span></span>
+          <span><span class="step-title">GitHub login</span><span class="step-body">Owner sign-in</span></span>
         </div>
         <div class="step-tab" data-progress="3" role="listitem">
           <span class="step-number">4</span>
+          <span><span class="step-title">Routing</span><span class="step-body">Cloudflare tunnel</span></span>
+        </div>
+        <div class="step-tab" data-progress="4" role="listitem">
+          <span class="step-number">5</span>
           <span><span class="step-title">Review</span><span class="step-body">Confirm settings</span></span>
         </div>
       </aside>
@@ -427,15 +431,34 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
         <input type="hidden" name="token" value="{esc(TOKEN)}">
         <div class="panel-header">
           <div class="panel-title">
-            <h2 id="step-heading">Domain and owner</h2>
-            <p id="step-description">Choose the hostname for the dashboard and the GitHub account that owns this installation.</p>
+            <h2 id="step-heading">Restore Backup</h2>
+            <p id="step-description">Optional: Upload an existing MyPaas database backup.</p>
           </div>
-          <span class="step-count" id="step-position">Step 1 of 4</span>
+          <span class="step-count" id="step-position">Step 1 of 5</span>
         </div>
         <div class="panel-body">
           {f'<div class="alert" role="alert">{esc(error)}</div>' if error else ''}
 
           <section class="wizard-step" data-step="0">
+            <div class="guide">
+              <div class="guide-card">
+                <strong>Restore from Backup (Optional)</strong>
+                <p>If you are migrating or recovering an existing MyPaas instance, you can upload a database backup file (<code>.sql.gz</code>).</p>
+              </div>
+            </div>
+            <div class="grid">
+              <div class="field full">
+                <label for="backup-file">Database Backup (.sql.gz)</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="file" id="backup-file" accept=".sql.gz" style="flex: 1; padding: 6px;">
+                    <button type="button" id="upload-backup-btn" class="secondary" style="flex: 0 0 auto;">Upload Backup</button>
+                </div>
+                <div id="backup-status" class="hint" style="margin-top: 8px;"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="wizard-step" data-step="1" hidden>
             <div class="guide">
               <div class="guide-card">
                 <strong>Use a domain that is already active in Cloudflare.</strong>
@@ -469,7 +492,7 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
             </div>
           </section>
 
-          <section class="wizard-step" data-step="1" hidden>
+          <section class="wizard-step" data-step="2" hidden>
             <div class="guide">
               <div class="guide-card">
                 <strong>Create one GitHub OAuth App.</strong>
@@ -499,7 +522,7 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
             </div>
           </section>
 
-          <section class="wizard-step" data-step="2" hidden>
+          <section class="wizard-step" data-step="3" hidden>
             <div class="guide">
               <div class="guide-card">
                 <strong>1. Get the tunnel token</strong>
@@ -536,7 +559,7 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
           </div>
           </section>
 
-          <section class="wizard-step" data-step="3" hidden>
+          <section class="wizard-step" data-step="4" hidden>
             <div class="guide">
               <div class="guide-card">
                 <strong>Confirm the values below.</strong>
@@ -596,6 +619,7 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
     const owner = document.getElementById('OWNER_EMAIL');
     const callback = document.getElementById('GITHUB_CALLBACK_URL');
     const titles = [
+      ['Restore Backup', 'Optional: Upload an existing MyPaas database backup.'],
       ['Domain and owner', 'Choose where MyPaas lives and who owns the first account.'],
       ['GitHub login', 'Connect one OAuth App for owner sign-in.'],
       ['Cloudflare routing', 'Send the dashboard and project wildcard through the tunnel to Caddy.'],
@@ -659,6 +683,47 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
       if (!invalid) return true;
       invalid.reportValidity();
       return false;
+    }}
+
+    const uploadBackupBtn = document.getElementById('upload-backup-btn');
+    const backupFile = document.getElementById('backup-file');
+    const backupStatus = document.getElementById('backup-status');
+
+    if (uploadBackupBtn) {{
+        uploadBackupBtn.addEventListener('click', async () => {{
+            if (!backupFile.files.length) {{
+                backupStatus.textContent = 'Please select a file first.';
+                backupStatus.style.color = 'var(--app-danger)';
+                return;
+            }}
+            const file = backupFile.files[0];
+            uploadBackupBtn.disabled = true;
+            uploadBackupBtn.textContent = 'Uploading...';
+            backupStatus.textContent = '';
+            
+            try {{
+                const res = await fetch('/upload-backup', {{
+                    method: 'POST',
+                    body: file,
+                    headers: {{ 'Content-Type': 'application/octet-stream' }}
+                }});
+                if (res.ok) {{
+                    backupStatus.textContent = 'Backup uploaded! It will be restored after configuration.';
+                    backupStatus.style.color = 'var(--app-info)';
+                    uploadBackupBtn.textContent = 'Uploaded';
+                }} else {{
+                    backupStatus.textContent = 'Upload failed. Please try again.';
+                    backupStatus.style.color = 'var(--app-danger)';
+                    uploadBackupBtn.disabled = false;
+                    uploadBackupBtn.textContent = 'Upload Backup';
+                }}
+            }} catch (err) {{
+                backupStatus.textContent = 'Upload error. Please try again.';
+                backupStatus.style.color = 'var(--app-danger)';
+                uploadBackupBtn.disabled = false;
+                uploadBackupBtn.textContent = 'Upload Backup';
+            }}
+        }});
     }}
 
     backButton.addEventListener('click', () => showStep(currentStep - 1));
@@ -776,6 +841,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if parsed.path == "/upload-backup":
+            length = int(self.headers.get("Content-Length", "0"))
+            if length > 0:
+                with open("/tmp/mypaas-restore.sql.gz", "wb") as f:
+                    f.write(self.rfile.read(length))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"success": true}')
+            else:
+                self.send_error(400, "Empty payload")
+            return
+
         if parsed.path != "/save":
             self.send_error(404)
             return
