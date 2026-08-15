@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -84,5 +85,5 @@ func TestInjectComposeEnvFileHonorsCancellation(t *testing.T) {
 }
 
 func strconvQuote(value string) string {
-	return `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
+	return strconv.Quote(value)
 }

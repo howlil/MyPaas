@@ -43,11 +43,11 @@ func TestApplyRetentionKeepsNewestMatchingFiles(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC)
 	names := []string{
-		"mypaas-daily-old.dump",
-		"mypaas-daily-mid.dump",
-		"mypaas-daily-new.dump",
+		"mypaas-daily-old.sql.gz",
+		"mypaas-daily-mid.sql.gz",
+		"mypaas-daily-new.sql.gz",
 		"notes.txt",
-		"mypaas-weekly-old.dump",
+		"mypaas-weekly-old.sql.gz",
 	}
 	for i, name := range names {
 		path := filepath.Join(dir, name)
@@ -63,16 +63,16 @@ func TestApplyRetentionKeepsNewestMatchingFiles(t *testing.T) {
 		t.Fatalf("applyRetention() error = %v", err)
 	}
 
-	assertExists(t, filepath.Join(dir, "mypaas-daily-new.dump"))
-	assertExists(t, filepath.Join(dir, "mypaas-daily-mid.dump"))
-	assertMissing(t, filepath.Join(dir, "mypaas-daily-old.dump"))
+	assertExists(t, filepath.Join(dir, "mypaas-daily-new.sql.gz"))
+	assertExists(t, filepath.Join(dir, "mypaas-daily-mid.sql.gz"))
+	assertMissing(t, filepath.Join(dir, "mypaas-daily-old.sql.gz"))
 	assertExists(t, filepath.Join(dir, "notes.txt"))
-	assertExists(t, filepath.Join(dir, "mypaas-weekly-old.dump"))
+	assertExists(t, filepath.Join(dir, "mypaas-weekly-old.sql.gz"))
 }
 
 func TestApplyRetentionAllowsKeepLargerThanMatchingFiles(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "mypaas-daily-only.dump")
+	path := filepath.Join(dir, "mypaas-daily-only.sql.gz")
 	if err := os.WriteFile(path, []byte("backup"), 0600); err != nil {
 		t.Fatal(err)
 	}
