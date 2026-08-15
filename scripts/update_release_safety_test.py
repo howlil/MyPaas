@@ -36,9 +36,16 @@ class UpdateReleaseSafetyContractTest(unittest.TestCase):
         self.assertIn('verify_stack "$docker_cmd" "$current_sha" "$rollback_tag"', updater)
         self.assertIn('previous runtime could not be verified after rollback', updater)
 
-    def test_publish_workflow_keeps_legacy_rollback_aliases_available(self):
+    def test_publish_workflow_requires_green_main_ci_and_keeps_rollback_aliases(self):
         workflow = self.text(".github/workflows/docker-publish.yml")
-        self.assertIn('rollback_tag=rollback-${GITHUB_SHA:0:12}', workflow)
+        self.assertIn('workflow_run:', workflow)
+        self.assertIn('workflows: ["CI"]', workflow)
+        self.assertIn("github.event.workflow_run.conclusion == 'success'", workflow)
+        self.assertIn("github.event.workflow_run.event == 'push'", workflow)
+        self.assertIn("github.event.workflow_run.head_branch == 'main'", workflow)
+        self.assertIn('RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}', workflow)
+        self.assertIn('rollback_tag=rollback-${RELEASE_SHA:0:12}', workflow)
+        self.assertIn('ref: ${{ steps.release.outputs.sha }}', workflow)
         self.assertIn('${{ env.REGISTRY }}/nabilrn/mypaas-api:${{ steps.release.outputs.rollback_tag }}', workflow)
         self.assertIn('${{ env.REGISTRY }}/nabilrn/mypaas-dashboard:${{ steps.release.outputs.rollback_tag }}', workflow)
 
