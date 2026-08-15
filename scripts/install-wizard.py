@@ -711,8 +711,8 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
                     backupStatus.textContent = 'Backup uploaded! Deploying MyPaas... You can safely close this window.';
                     backupStatus.style.color = 'var(--app-success)';
                     uploadBackupBtn.textContent = 'Deploying...';
-                    document.getElementById('next-btn').disabled = true;
-                    document.getElementById('back-btn').disabled = true;
+                    document.getElementById('next-button').disabled = true;
+                    document.getElementById('back-button').disabled = true;
                 }} else {{
                     backupStatus.textContent = 'Upload failed. Please try again.';
                     backupStatus.style.color = 'var(--app-danger)';
@@ -854,7 +854,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.wfile.write(b'{"success": true}')
                 def delayed_shutdown():
                     import time
-                    time.sleep(1)
+                    time.sleep(3)
                     self.server.shutdown()
                 threading.Thread(target=delayed_shutdown, daemon=True).start()
             else:
