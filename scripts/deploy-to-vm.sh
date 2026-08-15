@@ -26,6 +26,24 @@ EXPLICIT_BUILD_SHA="${MYPAAS_BUILD_SHA:-}"
 
 cd "$ROOT_DIR"
 
+if [[ -f "/tmp/mypaas-restore.tar.gz" ]]; then
+  echo "Extracting backup bundle..."
+  TMP_EXTRACT=$(mktemp -d)
+  tar -xzf /tmp/mypaas-restore.tar.gz -C "$TMP_EXTRACT"
+  
+  if [[ -f "$TMP_EXTRACT/.env" ]]; then
+    mv "$TMP_EXTRACT/.env" "$ENV_FILE"
+    echo "Restored .env from backup."
+  fi
+  
+  if [[ -f "$TMP_EXTRACT/database.sql" ]]; then
+    mv "$TMP_EXTRACT/database.sql" /tmp/mypaas-database.sql
+  fi
+  
+  rm -rf "$TMP_EXTRACT"
+  rm -f /tmp/mypaas-restore.tar.gz
+fi
+
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "Missing $ENV_FILE. Copy .env.example to .env and set production values first." >&2
   exit 1
@@ -136,11 +154,11 @@ until $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T postgres pg
   sleep 2
 done
 
-if [[ -f "/tmp/mypaas-restore.sql.gz" ]]; then
-  echo "Found backup file, restoring database..."
-  gzip -d -c /tmp/mypaas-restore.sql.gz | $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T -i postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
-  rm -f /tmp/mypaas-restore.sql.gz
-  echo "Backup restored successfully."
+if [[ -f "/tmp/mypaas-database.sql" ]]; then
+  echo "Found database backup, restoring..."
+  cat /tmp/mypaas-database.sql | $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T -i postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+  rm -f /tmp/mypaas-database.sql
+  echo "Database restored successfully."
 fi
 
 MIGRATE_DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"

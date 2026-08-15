@@ -443,14 +443,14 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
             <div class="guide">
               <div class="guide-card">
                 <strong>Restore from Backup (Optional)</strong>
-                <p>If you are migrating or recovering an existing MyPaas instance, you can upload a database backup file (<code>.sql.gz</code>).</p>
+                <p>If you are migrating or recovering an existing MyPaas instance, you can upload a database backup file (<code>.tar.gz</code>).</p>
               </div>
             </div>
             <div class="grid">
               <div class="field full">
-                <label for="backup-file">Database Backup (.sql.gz)</label>
+                <label for="backup-file">Database Backup (.tar.gz)</label>
                 <div style="display: flex; gap: 10px;">
-                    <input type="file" id="backup-file" accept=".sql.gz" style="flex: 1; padding: 6px;">
+                    <input type="file" id="backup-file" accept=".tar.gz" style="flex: 1; padding: 6px;">
                     <button type="button" id="upload-backup-btn" class="secondary" style="flex: 0 0 auto;">Upload Backup</button>
                 </div>
                 <div id="backup-status" class="hint" style="margin-top: 8px;"></div>
@@ -844,7 +844,7 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/upload-backup":
             length = int(self.headers.get("Content-Length", "0"))
             if length > 0:
-                with open("/tmp/mypaas-restore.sql.gz", "wb") as f:
+                with open("/tmp/mypaas-restore.tar.gz", "wb") as f:
                     f.write(self.rfile.read(length))
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
