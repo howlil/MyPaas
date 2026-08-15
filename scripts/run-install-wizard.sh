@@ -100,6 +100,9 @@ main() {
   fi
 
   wait "$WIZARD_PID"
+  
+  # Allow time for the final HTTP response to reach the browser
+  sleep 3
 }
 
 main "$@"
