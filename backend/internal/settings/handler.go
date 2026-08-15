@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"mypaas/internal/backup"
@@ -186,6 +187,23 @@ func (h *Handler) TriggerBackup(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	httpx.JSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+func (h *Handler) DownloadBackup(w http.ResponseWriter, r *http.Request) {
+	if h.backupService == nil {
+		httpx.Error(w, http.StatusServiceUnavailable, "BACKUP_NOT_CONFIGURED", "Backup service is not available", nil)
+		return
+	}
+
+	result, err := h.backupService.Run(r.Context())
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "BACKUP_FAILED", "Failed to generate backup: "+err.Error(), nil)
+		return
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(result.DailyPath)))
+	w.Header().Set("Content-Type", "application/gzip")
+	http.ServeFile(w, r, result.DailyPath)
 }
 
 func (h *Handler) UpdateSystem(w http.ResponseWriter, r *http.Request) {

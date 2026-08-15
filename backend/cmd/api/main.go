@@ -363,6 +363,7 @@ func registerRoutes(
 			r.Get("/migrate/{id}/status", migrationHandler.Status)
 			r.Post("/update", settingsHandler.UpdateSystem)
 			r.Post("/backup", settingsHandler.TriggerBackup)
+			r.Get("/backup/download", settingsHandler.DownloadBackup)
 		})
 	})
 }
