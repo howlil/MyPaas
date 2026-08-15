@@ -708,9 +708,11 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
                     headers: {{ 'Content-Type': 'application/octet-stream' }}
                 }});
                 if (res.ok) {{
-                    backupStatus.textContent = 'Backup uploaded! It will be restored after configuration.';
-                    backupStatus.style.color = 'var(--app-info)';
-                    uploadBackupBtn.textContent = 'Uploaded';
+                    backupStatus.textContent = 'Backup uploaded! Deploying MyPaas... You can safely close this window.';
+                    backupStatus.style.color = 'var(--app-success)';
+                    uploadBackupBtn.textContent = 'Deploying...';
+                    document.getElementById('next-btn').disabled = true;
+                    document.getElementById('back-btn').disabled = true;
                 }} else {{
                     backupStatus.textContent = 'Upload failed. Please try again.';
                     backupStatus.style.color = 'var(--app-danger)';
@@ -850,6 +852,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(b'{"success": true}')
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
             else:
                 self.send_error(400, "Empty payload")
             return
