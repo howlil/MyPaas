@@ -159,7 +159,7 @@ func (s *Service) pgDump(ctx context.Context, outputPath string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, "bash", "-c", fmt.Sprintf("pg_dump --no-owner --no-privileges | gzip > %s", outputPath))
+	cmd := exec.CommandContext(ctx, "sh", "-c", fmt.Sprintf("pg_dump --no-owner --no-privileges | gzip > %s", outputPath))
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
