@@ -281,16 +281,16 @@ func validateSettings(values map[string]float64) error {
 		}
 		switch key {
 		case "user_ram_quota_gb":
-			if value <= 0 || value > 1024 {
-				return errors.New("user RAM quota must be greater than 0 and at most 1024 GB")
+			if value <= 0 || value > 64 {
+				return errors.New("user RAM quota must be greater than 0 and at most 64 GB")
 			}
 		case "user_cpu_quota":
-			if value <= 0 || value > 256 {
-				return errors.New("user CPU quota must be greater than 0 and at most 256 cores")
+			if value <= 0 || value > 32 {
+				return errors.New("user CPU quota must be greater than 0 and at most 32 cores")
 			}
 		case "max_projects":
-			if value < 1 || value > 10000 || value != math.Trunc(value) {
-				return errors.New("maximum projects must be a whole number between 1 and 10000")
+			if value < 1 || value > 500 || value != math.Trunc(value) {
+				return errors.New("maximum projects must be a whole number between 1 and 500")
 			}
 		case "build_timeout_minutes":
 			if value < 1 || value > 1440 || value != math.Trunc(value) {
