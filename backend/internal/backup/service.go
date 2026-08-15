@@ -26,7 +26,7 @@ import (
 const (
 	dailyPrefix  = "mypaas-daily-"
 	weeklyPrefix = "mypaas-weekly-"
-	dumpSuffix   = ".sql.gz"
+	dumpSuffix   = ".tar.gz"
 )
 
 type Service struct {
@@ -159,12 +159,34 @@ func (s *Service) pgDump(ctx context.Context, outputPath string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, "sh", "-c", fmt.Sprintf("pg_dump --no-owner --no-privileges | gzip > %s", outputPath))
+	
+	tempDir, err := os.MkdirTemp("", "mypaas-backup-")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+	
+	dbPath := filepath.Join(tempDir, "database.sql")
+	envPath := filepath.Join(tempDir, ".env")
+	
+	envContent := strings.Join(os.Environ(), "\n")
+	if err := os.WriteFile(envPath, []byte(envContent), 0600); err != nil {
+		return fmt.Errorf("write .env: %w", err)
+	}
+	
+	cmd := exec.CommandContext(ctx, "sh", "-c", fmt.Sprintf("pg_dump --no-owner --no-privileges > %s", dbPath))
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("pg_dump: %w: %s", err, strings.TrimSpace(string(out)))
 	}
+	
+	tarCmd := exec.CommandContext(ctx, "tar", "-czf", outputPath, "-C", tempDir, "database.sql", ".env")
+	out, err = tarCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("tar: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	
 	return nil
 }
 
