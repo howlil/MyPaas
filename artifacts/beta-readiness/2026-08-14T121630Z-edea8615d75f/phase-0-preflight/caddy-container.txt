@@ -1,0 +1,4 @@
+COMMAND: docker ps --filter name=mypaas-caddy-prod --no-trunc
+--- OUTPUT ---
+CONTAINER ID                                                       IMAGE            COMMAND                                                         CREATED      STATUS      PORTS                                                             NAMES
+a1ff2e04b78aa24a1f843a72740dca5fdf6dd73df78e96f072d107fec8f2b910   caddy:2-alpine   "caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"   2 days ago   Up 2 days   443/tcp, 0.0.0.0:80->80/tcp, [::]:80->80/tcp, 2019/tcp, 443/udp   mypaas-caddy-prod

@@ -1,0 +1,8 @@
+COMMAND: docker compose -f docker-compose.prod.yml ps
+--- OUTPUT ---
+NAME                   IMAGE                                                                       COMMAND                  SERVICE       CREATED        STATUS                PORTS
+mypaas-api             ghcr.io/nabilrn/mypaas-api:b94361be993963c0ad04a5c3a76130bc8d8ef8ee         "/app/mypaas-api"        api           20 hours ago   Up 20 hours           127.0.0.1:8080->8080/tcp
+mypaas-caddy-prod      caddy:2-alpine                                                              "caddy run --config …"   caddy         2 days ago     Up 2 days             443/tcp, 0.0.0.0:80->80/tcp, [::]:80->80/tcp, 2019/tcp, 443/udp
+mypaas-cloudflared     cloudflare/cloudflared:latest                                               "cloudflared --no-au…"   cloudflared   26 hours ago   Up 26 hours           
+mypaas-dashboard       ghcr.io/nabilrn/mypaas-dashboard:b94361be993963c0ad04a5c3a76130bc8d8ef8ee   "docker-entrypoint.s…"   dashboard     20 hours ago   Up 20 hours           127.0.0.1:3000->3000/tcp
+mypaas-postgres-prod   postgres:16-alpine                                                          "docker-entrypoint.s…"   postgres      2 days ago     Up 2 days (healthy)   127.0.0.1:5432->5432/tcp

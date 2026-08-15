@@ -1,0 +1,3 @@
+COMMAND: docker ps --filter name=mypaas-dashboard --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+--- OUTPUT ---
+

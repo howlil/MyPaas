@@ -1,0 +1,3 @@
+COMMAND: git branch --show-current
+--- OUTPUT ---
+main

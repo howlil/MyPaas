@@ -1,0 +1,6 @@
+{
+  "gateState": "BLOCKED_ON_VM_EVIDENCE",
+  "testedCandidateSha": "edea8615d75f8e032bfb66bf430ab598b05876b2",
+  "blockedReason": "Phase 1 failed before the VM could be updated to the candidate release images. Production Playwright evidence must target the candidate dashboard/API.",
+  "currentRuntimeSha": "b94361be993963c0ad04a5c3a76130bc8d8ef8ee"
+}

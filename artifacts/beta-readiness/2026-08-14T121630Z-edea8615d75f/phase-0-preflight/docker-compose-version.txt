@@ -1,0 +1,3 @@
+COMMAND: docker compose version
+--- OUTPUT ---
+Docker Compose version v5.4.0

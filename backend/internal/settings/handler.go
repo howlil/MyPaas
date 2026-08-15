@@ -10,8 +10,10 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 
+	"mypaas/internal/backup"
 	"mypaas/internal/config"
 	"mypaas/internal/db"
 	"mypaas/internal/host"
@@ -31,12 +33,13 @@ var settingKeys = []string{
 }
 
 type Handler struct {
-	queries *db.Queries
-	cfg     *config.Config
+	queries       *db.Queries
+	cfg           *config.Config
+	backupService *backup.Service
 }
 
-func NewHandler(queries *db.Queries, cfg *config.Config) *Handler {
-	h := &Handler{queries: queries, cfg: cfg}
+func NewHandler(queries *db.Queries, cfg *config.Config, backupService *backup.Service) *Handler {
+	h := &Handler{queries: queries, cfg: cfg, backupService: backupService}
 	// The DB is the persisted source for owner-edited live settings. Rehydrate
 	// the shared config before the HTTP server starts accepting requests so a
 	// process restart cannot silently revert quota/build behavior to env values.
@@ -63,6 +66,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	}
 	res["mcp_api_token"] = h.cfg.ApiToken
 	res["cloudflare_configured"] = h.cfg.CloudflareAPIToken != "" && h.cfg.CloudflareZoneID != ""
+	res["s3_configured"] = h.cfg.S3Endpoint != "" && h.cfg.S3Bucket != "" && h.cfg.S3AccessKey != "" && h.cfg.S3SecretKey != ""
 	res["build_sha"] = strings.TrimSpace(os.Getenv("MYPAAS_BUILD_SHA"))
 
 	httpx.JSON(w, http.StatusOK, res)
@@ -121,6 +125,96 @@ func (h *Handler) UpdateCloudflareConfig(w http.ResponseWriter, r *http.Request)
 	h.cfg.CloudflareZoneID = req.ZoneID
 
 	h.Get(w, r)
+}
+
+type s3Req struct {
+	Endpoint  string `json:"s3_endpoint"`
+	Bucket    string `json:"s3_bucket"`
+	AccessKey string `json:"s3_access_key"`
+	SecretKey string `json:"s3_secret_key"`
+	Region    string `json:"s3_region"`
+}
+
+func (h *Handler) UpdateS3Config(w http.ResponseWriter, r *http.Request) {
+	var req s3Req
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.Error(w, http.StatusBadRequest, "INVALID_BODY", "Invalid request body", nil)
+		return
+	}
+
+	settings := map[string]string{
+		"s3_endpoint":   req.Endpoint,
+		"s3_bucket":     req.Bucket,
+		"s3_access_key": req.AccessKey,
+		"s3_secret_key": req.SecretKey,
+		"s3_region":     req.Region,
+	}
+
+	for k, v := range settings {
+		raw, _ := json.Marshal(v)
+		if err := h.queries.UpsertSetting(r.Context(), db.UpsertSettingParams{
+			Key:   k,
+			Value: raw,
+		}); err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "DB_WRITE_FAILED", "Failed to save "+k, nil)
+			return
+		}
+	}
+
+	h.cfg.S3Endpoint = req.Endpoint
+	h.cfg.S3Bucket = req.Bucket
+	h.cfg.S3AccessKey = req.AccessKey
+	h.cfg.S3SecretKey = req.SecretKey
+	h.cfg.S3Region = req.Region
+
+	h.Get(w, r)
+}
+
+func (h *Handler) TriggerBackup(w http.ResponseWriter, r *http.Request) {
+	if h.backupService == nil {
+		httpx.Error(w, http.StatusServiceUnavailable, "BACKUP_NOT_CONFIGURED", "Backup service is not available", nil)
+		return
+	}
+	
+	// Run in background to avoid blocking the HTTP response
+	go func() {
+		// Use a detached context for the background operation
+		_, err := h.backupService.Run(context.Background())
+		if err != nil {
+			// Just log the error, the backup service handles its own logging mostly
+		}
+	}()
+
+	httpx.JSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+func (h *Handler) UpdateSystem(w http.ResponseWriter, r *http.Request) {
+	installDir := os.Getenv("MYPAAS_INSTALL_DIR")
+	if installDir == "" {
+		installDir = "/root/MyPaas"
+	}
+	
+	scriptPath := installDir + "/scripts/update-vm.sh"
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		httpx.Error(w, http.StatusInternalServerError, "SCRIPT_NOT_FOUND", "Update script not found at "+scriptPath, nil)
+		return
+	}
+
+	cmd := exec.Command("bash", scriptPath)
+	cmd.SysProcAttr = nil
+	
+	// Start in background
+	if err := cmd.Start(); err != nil {
+		httpx.Error(w, http.StatusInternalServerError, "CMD_START_FAILED", "Failed to start update script", nil)
+		return
+	}
+	
+	// Detach the process by not calling Wait in this goroutine
+	go func() {
+		_ = cmd.Wait()
+	}()
+
+	httpx.JSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 }
 
 // Update upserts one or more platform settings and applies the supported

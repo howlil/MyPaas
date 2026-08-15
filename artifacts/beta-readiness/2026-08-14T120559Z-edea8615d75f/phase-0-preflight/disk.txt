@@ -1,0 +1,9 @@
+COMMAND: Get-PSDrive -PSProvider FileSystem | Select-Object Name,Used,Free,Root
+--- OUTPUT ---
+
+Name Used Free Root
+---- ---- ---- ----
+C       0      C:\ 
+
+
+

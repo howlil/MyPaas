@@ -1,0 +1,1 @@
+{"gateState":"FAIL","candidateSha":"edea8615d75f8e032bfb66bf430ab598b05876b2","rootCause":"dbstudio_compose_smoke.py sends the exact SHA fixture ref as branch; API rejects it as an unclonable branch.","evidence":["report.json","report.md","../phase-7-dbstudio-command.txt"]}

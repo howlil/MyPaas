@@ -1,0 +1,3 @@
+COMMAND: docker ps --filter name=caddy --no-trunc
+--- OUTPUT ---
+

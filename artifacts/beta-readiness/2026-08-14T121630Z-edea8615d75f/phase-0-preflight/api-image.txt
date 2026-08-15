@@ -1,0 +1,3 @@
+COMMAND: sh -c docker inspect mypaas-api --format '{{.Image}} {{.Config.Image}} {{.State.Status}}'
+--- OUTPUT ---
+sha256:d5e0155c095522c5e4da9536df8024052e694b767c461592cbbf83697d37f373 ghcr.io/nabilrn/mypaas-api:b94361be993963c0ad04a5c3a76130bc8d8ef8ee running

@@ -1,0 +1,38 @@
+{
+  "phase": "phase-0-preflight",
+  "status": "BLOCKED_ON_VM_EVIDENCE",
+  "testedCandidateSha": "edea8615d75f8e032bfb66bf430ab598b05876b2",
+  "repository": {
+    "branch": "test/beta-readiness-candidate",
+    "head": "edea8615d75f8e032bfb66bf430ab598b05876b2",
+    "remoteCandidate": "origin/test/beta-readiness-candidate",
+    "remoteCandidateSha": "edea8615d75f8e032bfb66bf430ab598b05876b2",
+    "pr110": {
+      "state": "OPEN",
+      "isDraft": true,
+      "baseRefName": "main",
+      "headRefName": "test/beta-readiness-candidate",
+      "mergedAt": null,
+      "headMatchesCandidate": true
+    },
+    "integratedWorkstreams": [102, 103, 104, 105, 106, 107, 108, 109],
+    "handoffPr": 111
+  },
+  "environment": {
+    "hostOs": "Microsoft Windows NT 10.0.26200.0",
+    "processorCount": 8,
+    "processorIdentifier": "Intel64 Family 6 Model 140 Stepping 1, GenuineIntel",
+    "disk": {
+      "drive": "C:\\",
+      "totalBytes": 511029800960,
+      "freeBytes": 162997026816
+    },
+    "dockerCliVersion": "Docker version 28.5.2, build ecc6942",
+    "dockerComposePluginVersion": "v2.40.3-desktop.1",
+    "dockerDaemonReachable": false,
+    "runningMypaasContainersObserved": false,
+    "productionComposeServicesObserved": false,
+    "localhostApiHealthReachable": false
+  },
+  "blockedReason": "The current environment is a Windows checkout without a reachable Docker daemon or running production MyPaaS VM installation. Required VM/E2E phases cannot be executed reproducibly here."
+}

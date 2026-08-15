@@ -1,0 +1,3 @@
+COMMAND: Invoke-WebRequest -UseBasicParsing http://localhost:8080/health
+--- OUTPUT ---
+Unable to connect to the remote server

@@ -1,4 +1,4 @@
-import { firefox } from '@playwright/test';
+import { chromium } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,7 +46,7 @@ export async function runAudit({ mode = 'mock' } = {}) {
 	await fs.rm(artifactsRoot, { recursive: true, force: true });
 	await fs.mkdir(artifactsRoot, { recursive: true });
 
-	const browser = await firefox.launch({ headless: true });
+	const browser = await chromium.launch({ headless: true });
 	const scenarios = buildScenarios(mode);
 	const runSummaries = [];
 

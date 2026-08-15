@@ -1,0 +1,3 @@
+COMMAND: docker ps --filter name=mypaas-api --format "table {{.Names}}\t{{.Image}}\t{{.Status}}"
+--- OUTPUT ---
+

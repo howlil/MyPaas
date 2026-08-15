@@ -1,0 +1,3 @@
+COMMAND: POST /api/projects/97d127c4-0deb-4a01-a2ec-7541ba8c5054/deploy
+--- OUTPUT ---
+{"data":{"id":"8a504f37-cfd1-492c-8370-4b6fcd43bc44","projectId":"97d127c4-0deb-4a01-a2ec-7541ba8c5054","commitSha":null,"commitMessage":null,"status":"queued","buildLog":null,"errorMsg":null,"imageTag":null,"triggeredBy":"manual","triggeredByUserId":"b1a9f496-e93f-46c4-97e4-6e3a5d032642","startedAt":"2026-08-14T12:45:01Z","finishedAt":null}}

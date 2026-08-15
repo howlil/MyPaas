@@ -1,0 +1,11 @@
+COMMAND: AUTO_UPDATE_IMAGE_WAIT_SECONDS=0 MYPAAS_REF=test/beta-readiness-candidate bash scripts/update-vm.sh
+--- OUTPUT ---
+
+==> Checking origin/test/beta-readiness-candidate for MyPaas updates
+From https://github.com/nabilrn/MyPaas
+ * branch            test/beta-readiness-candidate -> FETCH_HEAD
+
+==> Waiting for release images for edea8615d75f
+
+==> API image is not published yet; leaving the running installation unchanged
+exit_code=0

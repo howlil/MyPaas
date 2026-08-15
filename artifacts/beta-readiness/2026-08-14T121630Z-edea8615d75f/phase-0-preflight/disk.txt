@@ -1,0 +1,26 @@
+COMMAND: df -hT
+--- OUTPUT ---
+Filesystem     Type      Size  Used Avail Use% Mounted on
+udev           devtmpfs  1.9G     0  1.9G   0% /dev
+tmpfs          tmpfs     393M  1.7M  391M   1% /run
+/dev/sda       ext4       79G   12G   63G  16% /
+tmpfs          tmpfs     2.0G  4.0K  2.0G   1% /dev/shm
+tmpfs          tmpfs     5.0M     0  5.0M   0% /run/lock
+tmpfs          tmpfs     1.0M     0  1.0M   0% /run/credentials/systemd-journald.service
+tmpfs          tmpfs     2.0G  306M  1.7G  16% /tmp
+tmpfs          tmpfs     1.0M     0  1.0M   0% /run/credentials/serial-getty@ttyS0.service
+tmpfs          tmpfs     1.0M     0  1.0M   0% /run/credentials/getty@tty1.service
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/6e805a08c4447353615c7b0f0b0f47f92660b857ca4a224d2042e790ebc1925b
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/d0ca02df67723ee505c99528ef1c182eafd5d2c1ee6dbe732dda77d811a6ff8c
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/6dfdddef163fdd49746a5a76965e8f748028585d5da9fd5fb7e98755554f4f04
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/25aad6a88c64c5f9a88fec332b535d1b77325b48d27ce73c7b884690aeb9042c
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/a1ff2e04b78aa24a1f843a72740dca5fdf6dd73df78e96f072d107fec8f2b910
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/07b96e52b989992fa7be50060542b2dd3f61202d9c1ff359423be46a8614753a
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/37df64b936078996aa44e57a92dbe09636a51aba4b26eb2a87c4958d97337b6e
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/a98d8d3bc6816b6e77fafeb298f53d35c657e13bf9d467177012da5ca3e15c02
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/36f305d7123f13e5bf0b2f2ed23f195a8095172d7b049665150e0407e54dd366
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/7d8992df33858df0fb45010219fbaf0c87541c2f09cc7262d12cc963c0e5a55f
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/8e1c2670605f1f17f5008b9f6c6f7855637963465cabdccce05fd86819167f72
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/a9e244fc828600eb65aad15c90aab9bd1b04343e1a6cc9e30eee49b0fea73a10
+overlay        overlay    79G   12G   63G  16% /var/lib/docker/rootfs/overlayfs/0cb8960b9f6ae035f037a6633f5849e997900995624e0036b0bcc37ccd9dc4d7
+tmpfs          tmpfs     393M  4.0K  393M   1% /run/user/0

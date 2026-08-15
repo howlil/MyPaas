@@ -1,0 +1,26 @@
+COMMAND: docker manifest inspect ghcr.io/nabilrn/mypaas-dashboard:edea8615d75f8e032bfb66bf430ab598b05876b2
+--- OUTPUT ---
+{
+   "schemaVersion": 2,
+   "mediaType": "application/vnd.oci.image.index.v1+json",
+   "manifests": [
+      {
+         "mediaType": "application/vnd.oci.image.manifest.v1+json",
+         "size": 2003,
+         "digest": "sha256:e8bd052f636c12c3c4838025f6e6f22f3e9d832fb6b80451b118de7d9a0886d0",
+         "platform": {
+            "architecture": "amd64",
+            "os": "linux"
+         }
+      },
+      {
+         "mediaType": "application/vnd.oci.image.manifest.v1+json",
+         "size": 838,
+         "digest": "sha256:4c0a58847ab9bd49646bc666e16a134670cd687efbc21cf92e813397280d6273",
+         "platform": {
+            "architecture": "unknown",
+            "os": "unknown"
+         }
+      }
+   ]
+}

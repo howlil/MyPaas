@@ -1,0 +1,3 @@
+COMMAND: docker system df
+--- OUTPUT ---
+

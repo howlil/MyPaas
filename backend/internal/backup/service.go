@@ -14,18 +14,23 @@ import (
 	"strings"
 	"time"
 
-	"mypaas/internal/config"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	
+	mpconfig "mypaas/internal/config"
 	"mypaas/internal/container"
 )
 
 const (
 	dailyPrefix  = "mypaas-daily-"
 	weeklyPrefix = "mypaas-weekly-"
-	dumpSuffix   = ".dump"
+	dumpSuffix   = ".sql.gz"
 )
 
 type Service struct {
-	cfg    *config.Config
+	cfg    *mpconfig.Config
 	docker *container.DockerCLI
 	now    func() time.Time
 }
@@ -35,7 +40,7 @@ type Result struct {
 	WeeklyPath string
 }
 
-func NewService(cfg *config.Config, docker *container.DockerCLI) *Service {
+func NewService(cfg *mpconfig.Config, docker *container.DockerCLI) *Service {
 	return &Service{
 		cfg:    cfg,
 		docker: docker,
@@ -71,6 +76,14 @@ func (s *Service) Run(ctx context.Context) (Result, error) {
 	}
 	if err := s.pgDump(ctx, result.DailyPath); err != nil {
 		return Result{}, err
+	}
+
+	if s.cfg.S3Endpoint != "" && s.cfg.S3Bucket != "" && s.cfg.S3AccessKey != "" && s.cfg.S3SecretKey != "" {
+		if err := s.uploadToS3(ctx, result.DailyPath); err != nil {
+			slog.Error("failed to upload backup to S3", "error", err)
+		} else {
+			slog.Info("backup uploaded to S3", "path", result.DailyPath)
+		}
 	}
 
 	if now.Weekday() == s.cfg.BackupWeeklyDay {
@@ -146,7 +159,7 @@ func (s *Service) pgDump(ctx context.Context, outputPath string) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, "pg_dump", "--format=custom", "--no-owner", "--no-privileges", "--file", outputPath)
+	cmd := exec.CommandContext(ctx, "bash", "-c", fmt.Sprintf("pg_dump --no-owner --no-privileges | gzip > %s", outputPath))
 	cmd.Env = env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -202,6 +215,46 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+func (s *Service) uploadToS3(ctx context.Context, filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("open backup file: %w", err)
+	}
+	defer file.Close()
+
+	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+		return aws.Endpoint{
+			URL: s.cfg.S3Endpoint,
+		}, nil
+	})
+
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithRegion(s.cfg.S3Region),
+		config.WithEndpointResolverWithOptions(customResolver),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s.cfg.S3AccessKey, s.cfg.S3SecretKey, "")),
+	)
+	if err != nil {
+		return fmt.Errorf("load aws config: %w", err)
+	}
+
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.UsePathStyle = true
+	})
+
+	key := filepath.Base(filePath)
+
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(s.cfg.S3Bucket),
+		Key:    aws.String(key),
+		Body:   file,
+	})
+	if err != nil {
+		return fmt.Errorf("put object: %w", err)
+	}
+
+	return nil
 }
 
 func applyRetention(dir, prefix string, keep int) error {

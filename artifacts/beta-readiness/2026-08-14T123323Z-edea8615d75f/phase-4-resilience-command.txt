@@ -1,0 +1,28 @@
+Traceback (most recent call last):
+  File "/root/mypaas/benchmarks/beta_resilience.py", line 473, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/root/mypaas/benchmarks/beta_resilience.py", line 417, in main
+    projects = create_projects(client, args.project_count, prefix, args.fixture_repo, args.fixture_ref, run_id, args.parallel)
+  File "/root/mypaas/benchmarks/beta_resilience.py", line 182, in create_projects
+    rows = list(pool.map(create, payloads))
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 619, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 317, in _result_or_cancel
+    return fut.result(timeout)
+           ~~~~~~~~~~^^^^^^^^^
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 456, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/concurrent/futures/_base.py", line 401, in __get_result
+    raise self._exception
+  File "/usr/lib/python3.13/concurrent/futures/thread.py", line 59, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "/root/mypaas/benchmarks/beta_resilience.py", line 176, in create
+    _, row = client.request("POST", "/api/projects/", payload)
+             ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mypaas/benchmarks/beta_resilience.py", line 88, in request
+    raise HarnessError(f"{method} {path}: HTTP {status}: {sanitize(decoded)}")
+HarnessError: POST /api/projects/: HTTP 400: {"error": {"code": "VALIDATION_FAILED", "message": "validation failed: failed to clone repository branch \"edea8615d75f8e032bfb66bf430ab598b05876b2\""}}
+exit_code=1
