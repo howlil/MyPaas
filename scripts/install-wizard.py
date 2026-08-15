@@ -708,11 +708,10 @@ def form_html(error: str = "", values: dict[str, str] | None = None) -> bytes:
                     headers: {{ 'Content-Type': 'application/octet-stream' }}
                 }});
                 if (res.ok) {{
-                    backupStatus.textContent = 'Backup uploaded! Deploying MyPaas... You can safely close this window.';
-                    backupStatus.style.color = 'var(--app-success)';
-                    uploadBackupBtn.textContent = 'Deploying...';
-                    document.getElementById('next-button').disabled = true;
-                    document.getElementById('back-button').disabled = true;
+                    const html = await res.text();
+                    document.open();
+                    document.write(html);
+                    document.close();
                 }} else {{
                     backupStatus.textContent = 'Upload failed. Please try again.';
                     backupStatus.style.color = 'var(--app-danger)';
@@ -848,10 +847,10 @@ class Handler(BaseHTTPRequestHandler):
             if length > 0:
                 with open("/tmp/mypaas-restore.tar.gz", "wb") as f:
                     f.write(self.rfile.read(length))
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.end_headers()
-                self.wfile.write(b'{"success": true}')
+                self.send_html(success_html(
+                    title="Backup uploaded",
+                    message="Database backup and config were successfully uploaded."
+                ))
                 def delayed_shutdown():
                     import time
                     time.sleep(3)
@@ -880,7 +879,7 @@ class Handler(BaseHTTPRequestHandler):
         threading.Thread(target=self.server.shutdown, daemon=True).start()
 
 
-def success_html() -> bytes:
+def success_html(title: str = "Production config saved", message: str = f"Production config was written to {esc(ENV_FILE)}.") -> bytes:
     body = f"""<!doctype html>
 <html lang="en">
 <head>
@@ -956,8 +955,8 @@ def success_html() -> bytes:
     <section>
       <div class="success-brand"><img src="/brand/logo.png" alt="MyPaas"></div>
       <span class="status-mark" aria-hidden="true">✓</span>
-      <h1>Production config saved</h1>
-      <p>Production config was written to <code>{esc(ENV_FILE)}</code>. You can close this tab. The terminal installer will continue automatically.</p>
+      <h1>{esc(title)}</h1>
+      <p>{message} You can close this tab. The terminal installer will continue automatically.</p>
     </section>
   </main>
 </body>
