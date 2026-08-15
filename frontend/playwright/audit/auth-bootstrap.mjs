@@ -1,4 +1,4 @@
-import { firefox } from '@playwright/test';
+import { chromium } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,8 @@ const targetURL = new URL('/projects/new', baseURL).toString();
 
 await fs.mkdir(path.dirname(authFile), { recursive: true });
 
-const browser = await firefox.launch({ headless: false });
+const browser = await chromium.launch({ headless: false });
+
 const context = await browser.newContext();
 const page = await context.newPage();
 

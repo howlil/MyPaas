@@ -1,0 +1,80 @@
+COMMAND: candidate script forced rollback to candidate from failed main update
+--- OUTPUT ---
+
+==> Checking origin/main for MyPaas updates
+From https://github.com/nabilrn/MyPaas
+ * branch            main       -> FETCH_HEAD
+
+==> Waiting for release images for 455a74e89e39
+
+==> Updating checkout edea8615d75f -> 455a74e89e39
+HEAD is now at 455a74e fix: persist declared image volumes across redeploys
+
+==> mypaas-statd v0.2.0 is already healthy
+Pulling MyPaas release images for 455a74e89e39...
+455a74e89e396583f78fc51121c2cc691de4ecbd: Pulling from nabilrn/mypaas-api
+Digest: sha256:a22f57a5c1a2907653aeac656a4bf96722fd70f1f4bc2b5a9bcb0f3bd06ae9c8
+Status: Image is up to date for ghcr.io/nabilrn/mypaas-api:455a74e89e396583f78fc51121c2cc691de4ecbd
+ghcr.io/nabilrn/mypaas-api:455a74e89e396583f78fc51121c2cc691de4ecbd
+455a74e89e396583f78fc51121c2cc691de4ecbd: Pulling from nabilrn/mypaas-dashboard
+Digest: sha256:f0d117f2c1c6ffa6e3cecf66b255e7326f50403db5c567c5f2386aae0a40dca1
+Status: Image is up to date for ghcr.io/nabilrn/mypaas-dashboard:455a74e89e396583f78fc51121c2cc691de4ecbd
+ghcr.io/nabilrn/mypaas-dashboard:455a74e89e396583f78fc51121c2cc691de4ecbd
+Starting PostgreSQL...
+ Container mypaas-postgres-prod Running 
+Waiting for PostgreSQL...
+Running migrations...
+no change
+Pulling and starting MyPaas...
+ Image ghcr.io/nabilrn/mypaas-dashboard:455a74e89e396583f78fc51121c2cc691de4ecbd Pulling 
+ Image cloudflare/cloudflared:latest Pulling 
+ Image caddy:2-alpine Pulling 
+ Image postgres:16-alpine Pulling 
+ Image ghcr.io/nabilrn/mypaas-api:455a74e89e396583f78fc51121c2cc691de4ecbd Pulling 
+ Image cloudflare/cloudflared:latest Pulled 
+ Image ghcr.io/nabilrn/mypaas-dashboard:455a74e89e396583f78fc51121c2cc691de4ecbd Pulled 
+ Image ghcr.io/nabilrn/mypaas-api:455a74e89e396583f78fc51121c2cc691de4ecbd Pulled 
+ Image caddy:2-alpine Pulled 
+ Image postgres:16-alpine Pulled 
+ Container mypaas-caddy-prod Running 
+ Container mypaas-cloudflared Running 
+ Container mypaas-postgres-prod Running 
+ Container mypaas-dashboard Recreate 
+ Container mypaas-api Recreate 
+ Container mypaas-dashboard Recreated 
+ Container mypaas-api Recreated 
+ Container mypaas-dashboard Starting 
+ Container mypaas-postgres-prod Waiting 
+ Container mypaas-dashboard Started 
+ Container mypaas-postgres-prod Healthy 
+ Container mypaas-api Starting 
+ Container mypaas-api Started 
+MyPaas production stack is starting. Run scripts/verify-production.sh after the containers settle.
+
+==> Update failed; restoring checkout edea8615d75f
+HEAD is now at edea861 Merge pull request #111 from nabilrn/docs/codex-beta-vm-validation
+
+==> Attempting runtime rollback from verified local images
+Using verified local MyPaas images for rollback-ede...
+Starting PostgreSQL...
+ Container mypaas-postgres-prod Running 
+Waiting for PostgreSQL...
+Running migrations...
+no change
+Starting MyPaas...
+ Container mypaas-cloudflared Running 
+ Container mypaas-postgres-prod Running 
+ Container mypaas-caddy-prod Running 
+ Container mypaas-dashboard Recreate 
+ Container mypaas-api Recreate 
+ Container mypaas-dashboard Recreated 
+ Container mypaas-api Recreated 
+ Container mypaas-dashboard Starting 
+ Container mypaas-postgres-prod Waiting 
+ Container mypaas-dashboard Started 
+ Container mypaas-postgres-prod Healthy 
+ Container mypaas-api Starting 
+ Container mypaas-api Started 
+MyPaas production stack is starting. Run scripts/verify-production.sh after the containers settle.
+ERROR: MyPaas update to 455a74e89e39 failed and the previous runtime could not be verified after rollback
+exit_code=1

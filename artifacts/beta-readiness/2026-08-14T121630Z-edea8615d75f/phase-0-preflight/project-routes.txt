@@ -1,0 +1,6 @@
+COMMAND: sh -c docker exec mypaas-postgres-prod psql -U mypaas -d mypaas -Atc "select name,domain,status from projects order by created_at limit 20;"
+--- OUTPUT ---
+ERROR:  column "domain" does not exist
+LINE 1: select name,domain,status from projects order by created_at ...
+                    ^
+HINT:  Perhaps you meant to reference the column "projects.subdomain".

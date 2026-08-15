@@ -1,0 +1,43 @@
+COMMAND: git log --oneline --max-count 40
+--- OUTPUT ---
+edea861 Merge pull request #111 from nabilrn/docs/codex-beta-vm-validation
+7dd0a83 docs: add Codex beta VM validation handoff
+6887127 Merge pull request #109 from nabilrn/core/dbstudio-compose-reliability
+1d44865 Merge pull request #108 from nabilrn/core/create-project-runtime-contract
+8e54c7f Merge pull request #107 from nabilrn/core/backup-restore
+16a5fe2 Merge pull request #106 from nabilrn/core/update-release-safety
+0e83a32 Merge pull request #105 from nabilrn/infra/docker-cache-retention
+903e80f Merge pull request #104 from nabilrn/test/resilience-concurrent-deploys
+db8b7b4 Merge pull request #103 from nabilrn/test/perf-many-projects
+4e1df78 test: use canonical database URL fixtures
+1be3a65 test: cover DB Studio smoke contract
+7c0c46a test: add DB Studio Compose smoke harness
+d6666b1 test: add MariaDB DB Studio fixture
+229c7fc test: add MySQL DB Studio fixture
+b1a1e0a test: add PostgreSQL DB Studio fixture
+2630f38 test: cover Compose database resolver matrix
+4fd8f72 docs: define Create Project beta audit evidence
+bb957a8 test: align busy-state contract
+54e16c8 test: lock Create Project fail-closed readiness
+6a9cb7e test: enforce Create Project audit readiness contract
+6dd2bae docs: add beta backup restore drill
+f0588f1 test: load backup module safely
+036466a test: cover backup restore safety
+37eb1b1 core: add full backup restore tooling
+ed7e31e test: lock release safety invariants
+461ba07 core: verify target and rollback runtime identities
+1b4b4e0 core: allow verified local rollback images
+c5ca2a6 core: strengthen post-update production verification
+1294031 core: expose build SHA in owner settings
+dece1f0 core: derive build SHA from release image
+9ed4f7f core: expose running build identity
+122d595 test: cover retention defaults
+8e473cf test: cover Docker retention safety modes
+f53f3b7 infra: add Docker retention dry run
+54e6353 infra: schedule BuildKit cache cleanup
+d33a9cc infra: add BuildKit cache retention
+f70e22e test: cover resilience consistency checks
+43d0e74 test: add concurrent deployment resilience harness
+58d2836 test: add Compose app database fixture
+6072077 test: add Compose fixture server
+

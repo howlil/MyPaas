@@ -228,7 +228,7 @@ export const api = {
 		removeUser:  (id: string):             Promise<void>   => request(`/admin/users/${id}`, { method: 'DELETE' }),
 		listAuditLogs: (page = 0, pageSize = 50, lookahead = false): Promise<AuditLog[]> =>
 			request(`/admin/audit-logs?limit=${pageSize + (lookahead ? 1 : 0)}&offset=${page * pageSize}`),
-		getSettings: (): Promise<Record<string, number> & { mcp_api_token?: string; cloudflare_configured?: boolean }> => request('/admin/settings'),
+		getSettings: (): Promise<Record<string, number> & { mcp_api_token?: string; cloudflare_configured?: boolean; s3_endpoint?: string; s3_bucket?: string; s3_region?: string; s3_access_key?: string; s3_secret_key?: string }> => request('/admin/settings'),
 		updateSettings: (d: Record<string, number>): Promise<Record<string, number>> =>
 			request('/admin/settings', { method: 'PUT', body: JSON.stringify(d) }),
 		updateCloudflareConfig: (token: string, zone_id: string): Promise<void> =>
@@ -239,6 +239,10 @@ export const api = {
 			request('/admin/migrate/prepare', { method: 'POST' }),
 		migrationStatus: (id: string): Promise<MigrationStatus> =>
 			request(`/admin/migrate/${id}/status`),
-		getHostStats: (): Promise<HostStats> => request('/admin/host-stats')
+		getHostStats: (): Promise<HostStats> => request('/admin/host-stats'),
+		updateS3Config: (d: { endpoint: string; bucket: string; region: string; access_key: string; secret_key: string }): Promise<void> =>
+			request('/admin/settings/s3', { method: 'POST', body: JSON.stringify(d) }),
+		triggerBackup: (): Promise<void> => request('/admin/backup', { method: 'POST' }),
+		triggerUpdate: (): Promise<void> => request('/admin/update', { method: 'POST' })
 	}
 };

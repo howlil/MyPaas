@@ -1,0 +1,18 @@
+{
+  "phase": "phase-1-update-safety",
+  "scenario": "missing-image-safety",
+  "status": "PASS",
+  "targetCandidateSha": "edea8615d75f8e032bfb66bf430ab598b05876b2",
+  "targetImagesAvailable": false,
+  "unchanged": {
+    "checkout": true,
+    "api_config_image": true,
+    "api_image_id": true,
+    "dashboard_config_image": true,
+    "dashboard_image_id": true,
+    "api_build_sha": true
+  },
+  "healthAfter": "{\"status\":\"ok\"}",
+  "readyAfter": "{\"status\":\"ready\"}",
+  "note": "This validates the missing-image safety sub-scenario only. The full update gate is FAIL because candidate release images are unavailable, so successful N to N+1 update cannot be executed."
+}

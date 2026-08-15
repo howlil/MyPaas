@@ -1,0 +1,3 @@
+COMMAND: git status --short --branch
+--- OUTPUT ---
+## main...origin/main [behind 4]

@@ -1,0 +1,3 @@
+COMMAND: git rev-parse HEAD
+--- OUTPUT ---
+b94361be993963c0ad04a5c3a76130bc8d8ef8ee

@@ -128,11 +128,15 @@ func run() error {
 
 	appCtx, stopBackground := context.WithCancel(context.Background())
 	defer stopBackground()
-	backgroundDone := startBackgroundJobs(appCtx, cfg, routeReconciler)
+	
+	dockerClient := container.NewDockerCLI(cfg.DockerBindHost, cfg.ProjectNetwork)
+	backupService := backup.NewService(cfg, dockerClient)
+	
+	backgroundDone := startBackgroundJobs(appCtx, backupService, routeReconciler)
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      buildRouter(cfg, pool, tokenService, cipher),
+		Handler:      buildRouter(cfg, pool, tokenService, cipher, backupService, dockerClient),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -174,7 +178,7 @@ func run() error {
 	return nil
 }
 
-func buildRouter(cfg *config.Config, pool *pgxpool.Pool, tokenService *auth.TokenService, cipher *crypto.AESGCM) http.Handler {
+func buildRouter(cfg *config.Config, pool *pgxpool.Pool, tokenService *auth.TokenService, cipher *crypto.AESGCM, backupService *backup.Service, dockerClient *container.DockerCLI) http.Handler {
 	queries := db.New(pool)
 	authHandler := auth.NewHandler(cfg, queries, tokenService)
 	authMiddleware := auth.Middleware(tokenService, queries, cfg)
@@ -183,7 +187,6 @@ func buildRouter(cfg *config.Config, pool *pgxpool.Pool, tokenService *auth.Toke
 	auditMiddleware := audit.Middleware(auditService)
 	envService := envvar.NewService(queries, cipher)
 	portService := port.NewService(pool)
-	dockerClient := container.NewDockerCLI(cfg.DockerBindHost, cfg.ProjectNetwork)
 	quotaService := quota.NewService(queries, cfg, dockerClient)
 	sharedPostgresService := sharedpostgres.NewService(pool, cfg, envService)
 	deploymentService := deployment.NewService(cfg, queries, envService, portService, caddy.NewClient(cfg.CaddyAdmin, cfg.CaddyUpstreamHost), dockerClient)
@@ -205,7 +208,7 @@ func buildRouter(cfg *config.Config, pool *pgxpool.Pool, tokenService *auth.Toke
 	quotaHandler := quota.NewHandler(quotaService)
 	userHandler := user.NewHandler(queries)
 	webhookHandler := webhook.NewHandler(queries, deploymentService)
-	settingsHandler := settings.NewHandler(queries, cfg)
+	settingsHandler := settings.NewHandler(queries, cfg, backupService)
 	migrationHandler := migration.NewHandler(migration.NewService(cfg))
 
 	r := chi.NewRouter()
@@ -225,9 +228,9 @@ func buildRouter(cfg *config.Config, pool *pgxpool.Pool, tokenService *auth.Toke
 	return r
 }
 
-func startBackgroundJobs(ctx context.Context, cfg *config.Config, routeReconciler *deployment.Service) <-chan struct{} {
+func startBackgroundJobs(ctx context.Context, backupService *backup.Service, routeReconciler *deployment.Service) <-chan struct{} {
 	done := make(chan struct{})
-	backupDone := backup.NewService(cfg, container.NewDockerCLI(cfg.DockerBindHost, cfg.ProjectNetwork)).Start(ctx)
+	backupDone := backupService.Start(ctx)
 	routeDone := startRouteReconciler(ctx, routeReconciler, 30*time.Second)
 
 	go func() {
@@ -354,9 +357,12 @@ func registerRoutes(
 			r.Get("/host-stats", settingsHandler.HostStats)
 			r.Put("/settings", settingsHandler.Update)
 			r.Post("/settings/cloudflare", settingsHandler.UpdateCloudflareConfig)
+			r.Post("/settings/s3", settingsHandler.UpdateS3Config)
 			r.Post("/settings/mcp-token/regenerate", settingsHandler.RegenerateMCPToken)
 			r.Post("/migrate/prepare", migrationHandler.Prepare)
 			r.Get("/migrate/{id}/status", migrationHandler.Status)
+			r.Post("/update", settingsHandler.UpdateSystem)
+			r.Post("/backup", settingsHandler.TriggerBackup)
 		})
 	})
 }

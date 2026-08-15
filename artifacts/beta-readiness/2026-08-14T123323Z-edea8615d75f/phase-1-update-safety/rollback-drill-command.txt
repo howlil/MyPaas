@@ -1,0 +1,158 @@
+COMMAND: forced verification failure update to candidate
+--- OUTPUT ---
+
+==> Checking origin/test/beta-readiness-candidate for MyPaas updates
+From https://github.com/nabilrn/MyPaas
+ * branch            test/beta-readiness-candidate -> FETCH_HEAD
+
+==> Waiting for release images for edea8615d75f
+
+==> Updating checkout b94361be9939 -> edea8615d75f
+HEAD is now at edea861 Merge pull request #111 from nabilrn/docs/codex-beta-vm-validation
+
+==> mypaas-statd v0.2.0 is already healthy
+Pulling MyPaas release images for edea8615d75f...
+edea8615d75f8e032bfb66bf430ab598b05876b2: Pulling from nabilrn/mypaas-api
+Digest: sha256:a162ebccd7a6d7b64dbbe66c823fa3cdf290fdc1421380c3da019dbc2a8b3c1d
+Status: Image is up to date for ghcr.io/nabilrn/mypaas-api:edea8615d75f8e032bfb66bf430ab598b05876b2
+ghcr.io/nabilrn/mypaas-api:edea8615d75f8e032bfb66bf430ab598b05876b2
+edea8615d75f8e032bfb66bf430ab598b05876b2: Pulling from nabilrn/mypaas-dashboard
+Digest: sha256:52e810881d99dde058abaa12f8266574bcde7e3245abd63b0e8ea0295291a7f8
+Status: Image is up to date for ghcr.io/nabilrn/mypaas-dashboard:edea8615d75f8e032bfb66bf430ab598b05876b2
+ghcr.io/nabilrn/mypaas-dashboard:edea8615d75f8e032bfb66bf430ab598b05876b2
+Starting PostgreSQL...
+ Container mypaas-postgres-prod Running 
+Waiting for PostgreSQL...
+Running migrations...
+no change
+Starting MyPaas...
+ Image cloudflare/cloudflared:latest Pulling 
+ Image postgres:16-alpine Pulling 
+ Image ghcr.io/nabilrn/mypaas-api:edea8615d75f8e032bfb66bf430ab598b05876b2 Pulling 
+ Image ghcr.io/nabilrn/mypaas-dashboard:edea8615d75f8e032bfb66bf430ab598b05876b2 Pulling 
+ Image caddy:2-alpine Pulling 
+ Image caddy:2-alpine Pulled 
+ Image ghcr.io/nabilrn/mypaas-dashboard:edea8615d75f8e032bfb66bf430ab598b05876b2 Pulled 
+ Image ghcr.io/nabilrn/mypaas-api:edea8615d75f8e032bfb66bf430ab598b05876b2 Pulled 
+ cfc20c1fb335 Pulling fs layer 0B
+ cfc20c1fb335 Downloading 15.73MB
+ cfc20c1fb335 Download complete 0B
+ cfc20c1fb335 Extracting 1B
+ cfc20c1fb335 Extracting 1B
+ cfc20c1fb335 Extracting 1B
+ cfc20c1fb335 Pull complete 0B
+ Image cloudflare/cloudflared:latest Pulled 
+ 6a47e1b9b254 Pulling fs layer 0B
+ 7f5de3d007ea Pulling fs layer 0B
+ b053c4426c4a Pulling fs layer 0B
+ 19a2a5ab27c1 Pulling fs layer 0B
+ 5e81018bec01 Pulling fs layer 0B
+ be6f407f5414 Pulling fs layer 0B
+ f0e7204f9584 Pulling fs layer 0B
+ 8225e2970a7f Pulling fs layer 0B
+ 48d0d8b0e136 Pulling fs layer 0B
+ 27d0ba4f668a Pulling fs layer 0B
+ c58682903a2d Download complete 0B
+ 7dec47ad1967 Download complete 0B
+ 6a47e1b9b254 Download complete 0B
+ 6a47e1b9b254 Pull complete 0B
+ b053c4426c4a Download complete 0B
+ 27d0ba4f668a Download complete 0B
+ 7f5de3d007ea Download complete 0B
+ be6f407f5414 Download complete 0B
+ 19a2a5ab27c1 Downloading 725kB
+ 19a2a5ab27c1 Download complete 0B
+ f0e7204f9584 Downloading 5.243MB
+ 19a2a5ab27c1 Pull complete 0B
+ f0e7204f9584 Downloading 19.92MB
+ 8225e2970a7f Download complete 0B
+ 48d0d8b0e136 Download complete 0B
+ f0e7204f9584 Downloading 33.92MB
+ f0e7204f9584 Downloading 47.19MB
+ f0e7204f9584 Downloading 54.53MB
+ 5e81018bec01 Download complete 0B
+ be6f407f5414 Extracting 1B
+ 5e81018bec01 Pull complete 0B
+ f0e7204f9584 Downloading 61.57MB
+ be6f407f5414 Pull complete 0B
+ f0e7204f9584 Downloading 77.59MB
+ f0e7204f9584 Downloading 93.32MB
+ f0e7204f9584 Downloading 107MB
+ f0e7204f9584 Download complete 0B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 1B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 2B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 3B
+ f0e7204f9584 Extracting 4B
+ f0e7204f9584 Extracting 4B
+ f0e7204f9584 Extracting 4B
+ f0e7204f9584 Extracting 4B
+ f0e7204f9584 Extracting 4B
+ f0e7204f9584 Extracting 4B
+ f0e7204f9584 Extracting 4B
+ f0e7204f9584 Extracting 4B
+ b053c4426c4a Pull complete 0B
+ 27d0ba4f668a Pull complete 0B
+ 7f5de3d007ea Pull complete 0B
+ 8225e2970a7f Pull complete 0B
+ 48d0d8b0e136 Pull complete 0B
+ f0e7204f9584 Pull complete 0B
+ Image postgres:16-alpine Pulled 
+ Container mypaas-caddy-prod Running 
+ Container mypaas-dashboard Recreate 
+ Container mypaas-postgres-prod Recreate 
+ Container mypaas-cloudflared Recreate 
+ Container mypaas-dashboard Recreated 
+ Container mypaas-cloudflared Recreated 
+ Container mypaas-postgres-prod Recreated 
+ Container mypaas-api Recreate 
+ Container mypaas-api Recreated 
+ Container mypaas-dashboard Starting 
+ Container mypaas-postgres-prod Starting 
+ Container mypaas-dashboard Started 
+ Container mypaas-postgres-prod Started 
+ Container mypaas-postgres-prod Waiting 
+ Container mypaas-postgres-prod Healthy 
+ Container mypaas-api Starting 
+ Container mypaas-api Started 
+ Container mypaas-cloudflared Starting 
+ Container mypaas-cloudflared Started 
+MyPaas production stack is starting. Run scripts/verify-production.sh after the containers settle.
+
+==> Update failed; restoring checkout b94361be9939
+HEAD is now at b94361b fix: deploy VM by checkout image tag (#97)
+
+==> Attempting best-effort runtime rollback
+Pulling MyPaas release images for rollback-b94...
+Error response from daemon: failed to resolve reference "ghcr.io/nabilrn/mypaas-api:rollback-b94361be9939": ghcr.io/nabilrn/mypaas-api:rollback-b94361be9939: not found
+Missing API image ghcr.io/nabilrn/mypaas-api:rollback-b94361be9939.
+Wait for the Docker publish workflow to finish, or set MYPAAS_IMAGE_TAG explicitly.
+ERROR: MyPaas update to edea8615d75f failed
+exit_code=1

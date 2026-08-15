@@ -1,0 +1,49 @@
+COMMAND: successful update to candidate
+--- OUTPUT ---
+
+==> Checking origin/test/beta-readiness-candidate for MyPaas updates
+From https://github.com/nabilrn/MyPaas
+ * branch            test/beta-readiness-candidate -> FETCH_HEAD
+
+==> Waiting for release images for edea8615d75f
+
+==> Updating checkout b94361be9939 -> edea8615d75f
+HEAD is now at edea861 Merge pull request #111 from nabilrn/docs/codex-beta-vm-validation
+
+==> mypaas-statd v0.2.0 is already healthy
+Pulling MyPaas release images for edea8615d75f...
+edea8615d75f8e032bfb66bf430ab598b05876b2: Pulling from nabilrn/mypaas-api
+Digest: sha256:a162ebccd7a6d7b64dbbe66c823fa3cdf290fdc1421380c3da019dbc2a8b3c1d
+Status: Image is up to date for ghcr.io/nabilrn/mypaas-api:edea8615d75f8e032bfb66bf430ab598b05876b2
+ghcr.io/nabilrn/mypaas-api:edea8615d75f8e032bfb66bf430ab598b05876b2
+edea8615d75f8e032bfb66bf430ab598b05876b2: Pulling from nabilrn/mypaas-dashboard
+Digest: sha256:52e810881d99dde058abaa12f8266574bcde7e3245abd63b0e8ea0295291a7f8
+Status: Image is up to date for ghcr.io/nabilrn/mypaas-dashboard:edea8615d75f8e032bfb66bf430ab598b05876b2
+ghcr.io/nabilrn/mypaas-dashboard:edea8615d75f8e032bfb66bf430ab598b05876b2
+Starting PostgreSQL...
+ Container mypaas-postgres-prod Running 
+Waiting for PostgreSQL...
+Running migrations...
+no change
+Starting MyPaas...
+ Image cloudflare/cloudflared:latest Pulling 
+ Image ghcr.io/nabilrn/mypaas-api:edea8615d75f8e032bfb66bf430ab598b05876b2 Pulling 
+ Image postgres:16-alpine Pulling 
+ Image ghcr.io/nabilrn/mypaas-dashboard:edea8615d75f8e032bfb66bf430ab598b05876b2 Pulling 
+ Image caddy:2-alpine Pulling 
+ Image cloudflare/cloudflared:latest Pulled 
+ Image ghcr.io/nabilrn/mypaas-api:edea8615d75f8e032bfb66bf430ab598b05876b2 Pulled 
+ Image ghcr.io/nabilrn/mypaas-dashboard:edea8615d75f8e032bfb66bf430ab598b05876b2 Pulled 
+ Image caddy:2-alpine Pulled 
+ Image postgres:16-alpine Pulled 
+ Container mypaas-dashboard Running 
+ Container mypaas-caddy-prod Running 
+ Container mypaas-cloudflared Running 
+ Container mypaas-postgres-prod Running 
+ Container mypaas-api Running 
+ Container mypaas-postgres-prod Waiting 
+ Container mypaas-postgres-prod Healthy 
+MyPaas production stack is starting. Run scripts/verify-production.sh after the containers settle.
+
+==> MyPaas updated successfully to edea8615d75f
+exit_code=0

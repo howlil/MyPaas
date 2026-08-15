@@ -5,6 +5,7 @@
 	import { toast } from '$stores/toast';
 	import ActionButton from '$components/ActionButton.svelte';
 	import SectionPanel from '$components/SectionPanel.svelte';
+	import { goto } from '$app/navigation';
 
 	type SettingKey = 'user_ram_quota_gb' | 'user_cpu_quota' | 'max_projects' | 'build_timeout_minutes';
 	type NumericSettings = Record<SettingKey, number>;
@@ -21,6 +22,18 @@
 	let hostStats: HostStats | null = null;
 	let loadingSettings = true;
 	let savingSettings = false;
+	let savingS3 = false;
+	let triggeringBackup = false;
+	let triggeringUpdate = false;
+	let updateOverlayOpen = false;
+
+	let s3Config = {
+		endpoint: '',
+		bucket: '',
+		region: '',
+		access_key: '',
+		secret_key: ''
+	};
 
 	$: settingsChanged = (Object.keys(defaultSettings) as SettingKey[]).some((key) => settings[key] !== savedSettings[key]);
 	$: validationErrors = {
@@ -50,6 +63,13 @@
 				user_cpu_quota: numericValue(data.user_cpu_quota),
 				max_projects: numericValue(data.max_projects),
 				build_timeout_minutes: numericValue(data.build_timeout_minutes)
+			};
+			s3Config = {
+				endpoint: ((data as any).s3_endpoint as string) || '',
+				bucket: ((data as any).s3_bucket as string) || '',
+				region: ((data as any).s3_region as string) || '',
+				access_key: ((data as any).s3_access_key as string) || '',
+				secret_key: ((data as any).s3_secret_key as string) || ''
 			};
 			savedSettings = { ...settings };
 			hostStats = capacity;
@@ -82,6 +102,63 @@
 		}
 	}
 
+	async function saveS3Config() {
+		savingS3 = true;
+		try {
+			await api.admin.updateS3Config(s3Config);
+			toast.success('S3 configuration saved');
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to save S3 configuration');
+		} finally {
+			savingS3 = false;
+		}
+	}
+
+	async function triggerBackup() {
+		triggeringBackup = true;
+		try {
+			await api.admin.triggerBackup();
+			toast.success('Backup triggered successfully');
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to trigger backup');
+		} finally {
+			triggeringBackup = false;
+		}
+	}
+
+	async function triggerUpdate() {
+		triggeringUpdate = true;
+		try {
+			await api.admin.triggerUpdate();
+			updateOverlayOpen = true;
+			startUpdatePolling();
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'Failed to trigger update');
+			console.error(error);
+		} finally {
+			triggeringUpdate = false;
+		}
+	}
+
+	function startUpdatePolling() {
+		let wasDown = false;
+		const poll = setInterval(async () => {
+			try {
+				const res = await fetch('/api/health');
+				if (res.ok) {
+					if (wasDown) {
+						clearInterval(poll);
+						window.location.href = '/';
+					}
+				} else {
+					wasDown = true;
+				}
+			} catch {
+				wasDown = true;
+			}
+		}, 3000);
+	}
+
 	function discardChanges() {
 		settings = { ...savedSettings };
 	}
@@ -111,6 +188,14 @@
 <svelte:head>
 	<title>Settings · MyPaas</title>
 </svelte:head>
+
+{#if updateOverlayOpen}
+	<div class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/90 backdrop-blur-sm dark:bg-gray-950/90">
+		<LoaderCircle class="mb-4 h-12 w-12 animate-spin text-gray-500 dark:text-gray-400" />
+		<h2 class="text-xl font-medium text-gray-900 dark:text-white">Updating MyPaas</h2>
+		<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">Please wait while the platform restarts...</p>
+	</div>
+{/if}
 
 <div class="page-shell space-y-4 py-6">
 	<p class="px-5 text-sm text-gray-500 dark:text-gray-400">Configure the guardrails enforced by this MyPaas control plane. Capacity context is shown so limits are not edited as isolated numbers.</p>
@@ -195,6 +280,41 @@
 				</label>
 			</div>
 			<p class="mt-5 border-t border-gray-100 pt-4 text-xs text-gray-500 dark:border-neutral-800 dark:text-gray-400">Deployment concurrency remains an installation-level setting (<span class="font-mono">MAX_CONCURRENT_DEPLOYS</span>) because worker concurrency is established when the API process starts.</p>
+		</SectionPanel>
+
+		<SectionPanel title="Off-site Backup" description="Configure S3-compatible storage for automated PostgreSQL and configuration backups.">
+			<div class="grid gap-5 lg:grid-cols-2">
+				<label class="block">
+					<span class="field-label">S3 Endpoint</span>
+					<input type="text" bind:value={s3Config.endpoint} class="field" placeholder="https://s3.eu-central-1.amazonaws.com" />
+				</label>
+				<label class="block">
+					<span class="field-label">Bucket</span>
+					<input type="text" bind:value={s3Config.bucket} class="field" placeholder="mypaas-backups" />
+				</label>
+				<label class="block">
+					<span class="field-label">Region</span>
+					<input type="text" bind:value={s3Config.region} class="field" placeholder="eu-central-1" />
+				</label>
+				<label class="block">
+					<span class="field-label">Access Key</span>
+					<input type="text" bind:value={s3Config.access_key} class="field" />
+				</label>
+				<label class="block lg:col-span-2">
+					<span class="field-label">Secret Key</span>
+					<input type="password" bind:value={s3Config.secret_key} class="field" />
+				</label>
+			</div>
+			<div class="mt-5 flex items-center gap-3 border-t border-gray-100 pt-4 dark:border-neutral-800">
+				<ActionButton variant="primary" size="sm" loading={savingS3} on:click={saveS3Config}>Save S3 Config</ActionButton>
+				<ActionButton variant="secondary" size="sm" loading={triggeringBackup} on:click={triggerBackup}>Trigger Manual Backup</ActionButton>
+			</div>
+		</SectionPanel>
+
+		<SectionPanel title="System Update" description="Update MyPaas to the latest version and restart the control plane.">
+			<div class="mt-2">
+				<ActionButton variant="primary" size="sm" loading={triggeringUpdate} on:click={triggerUpdate}>Update MyPaas</ActionButton>
+			</div>
 		</SectionPanel>
 
 		{#if settingsChanged}

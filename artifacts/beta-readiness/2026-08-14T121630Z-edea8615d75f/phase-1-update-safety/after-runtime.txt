@@ -1,0 +1,8 @@
+checkout=b94361be993963c0ad04a5c3a76130bc8d8ef8ee
+api_config_image=ghcr.io/nabilrn/mypaas-api:b94361be993963c0ad04a5c3a76130bc8d8ef8ee
+api_image_id=sha256:d5e0155c095522c5e4da9536df8024052e694b767c461592cbbf83697d37f373
+dashboard_config_image=ghcr.io/nabilrn/mypaas-dashboard:b94361be993963c0ad04a5c3a76130bc8d8ef8ee
+dashboard_image_id=sha256:a9612b61aa1261e70c75aad73fb18609d28be635005be06efc3a9d3a719a9c5d
+api_build_sha=
+health={"status":"ok"}
+ready={"status":"ready"}

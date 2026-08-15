@@ -1,0 +1,14 @@
+{
+  "kind": "backup-restore-plan",
+  "backupIncludes": [
+    "production .env (sensitive, private bundle file)",
+    "control-plane PostgreSQL custom dump",
+    "/var/lib/mypaas/static",
+    "/var/lib/mypaas/compose",
+    "volumes labeled mypaas.managed=true",
+    "Compose volumes belonging to active MyPaas projects"
+  ],
+  "backupConsistency": "running managed-volume consumers require --quiesce-managed-containers",
+  "restoreSafety": "restore requires --confirm-restore and verifies all manifest checksums before mutation",
+  "runtimeAcceptance": "fresh-VM login/projects/env/routes/deployments/persistent-data/DB-Studio checks remain external evidence"
+}

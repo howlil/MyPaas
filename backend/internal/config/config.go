@@ -42,6 +42,12 @@ type Config struct {
 	CloudflareAPIToken string
 	CloudflareZoneID   string
 
+	S3Endpoint  string
+	S3Bucket    string
+	S3AccessKey string
+	S3SecretKey string
+	S3Region    string
+
 	BackupEnabled        bool
 	BackupDir            string
 	BackupDailyAt        string
@@ -175,6 +181,12 @@ func Load() (*Config, error) {
 
 		CloudflareAPIToken: envStr("CLOUDFLARE_API_TOKEN", ""),
 		CloudflareZoneID:   envStr("CLOUDFLARE_ZONE_ID", ""),
+
+		S3Endpoint:  envStr("S3_ENDPOINT", ""),
+		S3Bucket:    envStr("S3_BUCKET", ""),
+		S3AccessKey: envStr("S3_ACCESS_KEY", ""),
+		S3SecretKey: envStr("S3_SECRET_KEY", ""),
+		S3Region:    envStr("S3_REGION", ""),
 
 		BackupEnabled:        backupEnabled,
 		BackupDir:            envPath("BACKUP_DIR", "/var/lib/mypaas/backups"),
