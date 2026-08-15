@@ -73,7 +73,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - ./.env:/mypaas/.env:ro
+      - ./.env:/etc/mypaas/.env:ro
       - ${DOCKER_SOCKET}:${DOCKER_SOCKET}
       - /run/mypaas:/run/mypaas
       - /var/lib/mypaas/volumes:/var/lib/mypaas/volumes

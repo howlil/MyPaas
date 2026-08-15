@@ -169,8 +169,14 @@ func (s *Service) pgDump(ctx context.Context, outputPath string) error {
 	dbPath := filepath.Join(tempDir, "database.sql")
 	envPath := filepath.Join(tempDir, ".env")
 	
-	envContent := strings.Join(os.Environ(), "\n")
-	if err := os.WriteFile(envPath, []byte(envContent), 0600); err != nil {
+	envData, err := os.ReadFile("/etc/mypaas/.env")
+	if err != nil {
+		slog.Warn("could not read /etc/mypaas/.env, falling back to os.Environ", "error", err)
+		envContent := strings.Join(os.Environ(), "\n")
+		envData = []byte(envContent)
+	}
+	
+	if err := os.WriteFile(envPath, envData, 0600); err != nil {
 		return fmt.Errorf("write .env: %w", err)
 	}
 	
