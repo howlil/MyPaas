@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	
 	mpconfig "mypaas/internal/config"
 	"mypaas/internal/container"
@@ -277,6 +278,7 @@ func (s *Service) uploadToS3(ctx context.Context, filePath string) error {
 		Bucket: aws.String(s.cfg.S3Bucket),
 		Key:    aws.String(key),
 		Body:   file,
+		ACL:    types.ObjectCannedACLPrivate,
 	})
 	if err != nil {
 		return fmt.Errorf("put object: %w", err)
