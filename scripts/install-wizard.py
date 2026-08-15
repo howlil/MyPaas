@@ -960,9 +960,9 @@ def success_html(title: str = "Production config saved", message: str = f"Produc
     </section>
   </main>
   <script>
-    setTimeout(() => {
+    setTimeout(() => {{
       window.close();
-    }, 4000);
+    }}, 4000);
   </script>
 </body>
 </html>"""

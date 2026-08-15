@@ -181,6 +181,13 @@ class InstallConfigTest(unittest.TestCase):
         self.assertIn('3. Confirm DNS', html)
         self.assertNotIn('mark-dot', html)
 
+    def test_success_html_renders_auto_close_script(self) -> None:
+        html = WIZARD.success_html(title="Done", message="Saved.").decode("utf-8")
+
+        self.assertIn("setTimeout(() => {", html)
+        self.assertIn("window.close();", html)
+        self.assertIn("}, 4000);", html)
+
     def test_installer_enables_temporary_public_wizard_by_default(self) -> None:
         installer = (ROOT_DIR / "scripts" / "install-vm.sh").read_text(encoding="utf-8")
 

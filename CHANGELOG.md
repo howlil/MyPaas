@@ -114,6 +114,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 ### Fixed
+- Install wizard success-page JavaScript is escaped correctly inside the Python f-string, with regression coverage for rendered auto-close behavior.
+- GHCR API/dashboard images are published only after the exact `main` commit passes the consolidated CI gate, including Python syntax and Podman compatibility checks.
 - Image-mode persistence now recognizes the optional `io.mypaas.persistent-volumes` image label and reuses the existing deterministic Docker-managed volume identity without requiring Docker `VOLUME` semantics.
 - Project log consoles now remain scrollable inside the shared terminal surface and show a visible highlight when log text is selected.
 - Stop/start/restart lifecycle actions now keep Caddy routes aligned with container state, and project SSE metrics no longer overwrite a stopped project back to running.
