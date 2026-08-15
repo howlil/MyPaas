@@ -22,18 +22,11 @@
 	let hostStats: HostStats | null = null;
 	let loadingSettings = true;
 	let savingSettings = false;
-	let savingS3 = false;
 	let triggeringUpdate = false;
 	let updateOverlayOpen = false;
 	let currentBuildSha = '';
 
-	let s3Config = {
-		endpoint: '',
-		bucket: '',
-		region: '',
-		access_key: '',
-		secret_key: ''
-	};
+
 
 	$: settingsChanged = (Object.keys(defaultSettings) as SettingKey[]).some((key) => settings[key] !== savedSettings[key]);
 	$: validationErrors = {
@@ -63,13 +56,6 @@
 				user_cpu_quota: numericValue(data.user_cpu_quota),
 				max_projects: numericValue(data.max_projects),
 				build_timeout_minutes: numericValue(data.build_timeout_minutes)
-			};
-			s3Config = {
-				endpoint: ((data as any).s3_endpoint as string) || '',
-				bucket: ((data as any).s3_bucket as string) || '',
-				region: ((data as any).s3_region as string) || '',
-				access_key: ((data as any).s3_access_key as string) || '',
-				secret_key: ((data as any).s3_secret_key as string) || ''
 			};
 			currentBuildSha = ((data as any).build_sha as string) || '';
 			savedSettings = { ...settings };
@@ -101,22 +87,6 @@
 		} finally {
 			savingSettings = false;
 		}
-	}
-
-	async function saveS3Config() {
-		savingS3 = true;
-		try {
-			await api.admin.updateS3Config(s3Config);
-			toast.success('S3 configuration saved');
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'Failed to save S3 configuration');
-		} finally {
-			savingS3 = false;
-		}
-	}
-
-	function downloadBackup() {
-		window.location.href = '/api/admin/backup/download';
 	}
 
 	async function triggerUpdate() {
@@ -273,60 +243,6 @@
 				</label>
 			</div>
 			<p class="mt-5 border-t border-gray-100 pt-4 text-xs text-gray-500 dark:border-neutral-800 dark:text-gray-400">Deployment concurrency remains an installation-level setting (<span class="font-mono">MAX_CONCURRENT_DEPLOYS</span>) because worker concurrency is established when the API process starts.</p>
-		</SectionPanel>
-
-		<SectionPanel title="Backup & Restore" description="Manage automated off-site backups and on-demand manual archives of PostgreSQL and platform configuration." contentClass="p-0">
-			<div class="grid divide-y divide-gray-100 dark:divide-neutral-800 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
-				<div class="p-4 sm:p-5">
-					<div class="mb-4 flex items-center gap-3">
-						<Cloud class="mt-0.5 h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500" aria-hidden="true" />
-						<div>
-							<p class="text-sm font-medium text-gray-950 dark:text-white">S3 Automated Backup</p>
-							<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Configure S3-compatible storage for automated daily backups.</p>
-						</div>
-					</div>
-					<div class="space-y-4">
-						<label class="block">
-							<span class="field-label">S3 Endpoint</span>
-							<input type="text" bind:value={s3Config.endpoint} class="field" placeholder="https://s3.eu-central-1.amazonaws.com" />
-						</label>
-						<label class="block">
-							<span class="field-label">Bucket</span>
-							<input type="text" bind:value={s3Config.bucket} class="field" placeholder="mypaas-backups" />
-						</label>
-						<div class="grid grid-cols-2 gap-4">
-							<label class="block">
-								<span class="field-label">Region</span>
-								<input type="text" bind:value={s3Config.region} class="field" placeholder="eu-central-1" />
-							</label>
-							<label class="block">
-								<span class="field-label">Access Key</span>
-								<input type="text" bind:value={s3Config.access_key} class="field" />
-							</label>
-						</div>
-						<label class="block">
-							<span class="field-label">Secret Key</span>
-							<input type="password" bind:value={s3Config.secret_key} class="field" />
-						</label>
-					</div>
-					<div class="mt-5 border-t border-gray-100 pt-4 dark:border-neutral-800">
-						<ActionButton variant="primary" size="sm" loading={savingS3} on:click={saveS3Config}>Save S3 Config</ActionButton>
-					</div>
-				</div>
-				<div class="p-4 sm:p-5">
-					<div class="mb-4 flex items-center gap-3">
-						<Download class="mt-0.5 h-4 w-4 shrink-0 text-gray-400 dark:text-gray-500" aria-hidden="true" />
-						<div>
-							<p class="text-sm font-medium text-gray-950 dark:text-white">Manual Backup</p>
-							<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Download a complete snapshot of the database and platform configuration immediately.</p>
-						</div>
-					</div>
-					<ActionButton variant="secondary" size="sm" on:click={downloadBackup}>
-						<Download slot="icon" class="h-4 w-4" />
-						Download Backup
-					</ActionButton>
-				</div>
-			</div>
 		</SectionPanel>
 
 		<SectionPanel title="System Update" description="Update MyPaas to the latest version and restart the control plane.">
