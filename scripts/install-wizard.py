@@ -956,9 +956,14 @@ def success_html(title: str = "Production config saved", message: str = f"Produc
       <div class="success-brand"><img src="/brand/logo.png" alt="MyPaas"></div>
       <span class="status-mark" aria-hidden="true">✓</span>
       <h1>{esc(title)}</h1>
-      <p>{message} You can close this tab. The terminal installer will continue automatically.</p>
+      <p>{message} This window will close automatically. The terminal installer will continue.</p>
     </section>
   </main>
+  <script>
+    setTimeout(() => {
+      window.close();
+    }, 4000);
+  </script>
 </body>
 </html>"""
     return body.encode("utf-8")
