@@ -196,19 +196,19 @@
 			<div class="grid gap-5 lg:grid-cols-3">
 				<label class="block" for="user_ram_quota_gb">
 					<span class="field-label">RAM quota per user</span>
-					<div class="flex items-center gap-2"><input type="number" id="user_ram_quota_gb" min="0.25" max="1024" step="0.25" bind:value={settings.user_ram_quota_gb} class="field min-w-0 flex-1" aria-invalid={validationErrors.user_ram_quota_gb ? 'true' : undefined} /><span class="w-14 shrink-0 text-xs text-gray-500 dark:text-gray-400">GB</span></div>
+					<div class="flex items-center gap-2"><input type="number" id="user_ram_quota_gb" min="0.25" max="64" step="0.25" bind:value={settings.user_ram_quota_gb} class="field min-w-0 flex-1" aria-invalid={validationErrors.user_ram_quota_gb ? 'true' : undefined} /><span class="w-14 shrink-0 text-xs text-gray-500 dark:text-gray-400">GB</span></div>
 					<p class="field-hint">Maximum aggregate project memory a user may allocate.</p>
 					{#if validationErrors.user_ram_quota_gb}<p class="mt-1 text-xs text-red-600 dark:text-red-300">{validationErrors.user_ram_quota_gb}</p>{/if}
 				</label>
 				<label class="block" for="user_cpu_quota">
 					<span class="field-label">CPU quota per user</span>
-					<div class="flex items-center gap-2"><input type="number" id="user_cpu_quota" min="0.1" max="256" step="0.1" bind:value={settings.user_cpu_quota} class="field min-w-0 flex-1" aria-invalid={validationErrors.user_cpu_quota ? 'true' : undefined} /><span class="w-14 shrink-0 text-xs text-gray-500 dark:text-gray-400">cores</span></div>
+					<div class="flex items-center gap-2"><input type="number" id="user_cpu_quota" min="0.1" max="32" step="0.1" bind:value={settings.user_cpu_quota} class="field min-w-0 flex-1" aria-invalid={validationErrors.user_cpu_quota ? 'true' : undefined} /><span class="w-14 shrink-0 text-xs text-gray-500 dark:text-gray-400">cores</span></div>
 					<p class="field-hint">Maximum aggregate project CPU allocation for one user.</p>
 					{#if validationErrors.user_cpu_quota}<p class="mt-1 text-xs text-red-600 dark:text-red-300">{validationErrors.user_cpu_quota}</p>{/if}
 				</label>
 				<label class="block" for="max_projects">
 					<span class="field-label">Maximum projects per user</span>
-					<div class="flex items-center gap-2"><input type="number" id="max_projects" min="1" max="10000" step="1" bind:value={settings.max_projects} class="field min-w-0 flex-1" aria-invalid={validationErrors.max_projects ? 'true' : undefined} /><span class="w-14 shrink-0 text-xs text-gray-500 dark:text-gray-400">projects</span></div>
+					<div class="flex items-center gap-2"><input type="number" id="max_projects" min="1" max="500" step="1" bind:value={settings.max_projects} class="field min-w-0 flex-1" aria-invalid={validationErrors.max_projects ? 'true' : undefined} /><span class="w-14 shrink-0 text-xs text-gray-500 dark:text-gray-400">projects</span></div>
 					<p class="field-hint">Stops new project creation after this ownership limit is reached.</p>
 					{#if validationErrors.max_projects}<p class="mt-1 text-xs text-red-600 dark:text-red-300">{validationErrors.max_projects}</p>{/if}
 				</label>

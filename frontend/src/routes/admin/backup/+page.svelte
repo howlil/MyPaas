@@ -96,6 +96,15 @@
 		</div>
 	{:else}
 		<SectionPanel title="S3 Automated Backup" description="Configure S3-compatible storage for automated daily backups.">
+			<div class="mb-6 rounded-md border border-gray-200 bg-gray-50 p-4 dark:border-neutral-800 dark:bg-neutral-900">
+				<h3 class="text-sm font-medium text-gray-900 dark:text-white">Cloudflare R2 Setup Guide</h3>
+				<div class="mt-2 space-y-1.5 text-sm text-gray-600 dark:text-gray-400">
+					<p>1. Go to Cloudflare Dashboard &rarr; <strong>R2 Object Storage</strong> and create a bucket.</p>
+					<p>2. Click <strong>Manage R2 API Tokens</strong> and create a token with <strong>Object Read &amp; Write</strong> permissions.</p>
+					<p>3. Copy the <strong>S3 Endpoint</strong> from the bucket settings (e.g., <code>https://&lt;account-id&gt;.r2.cloudflarestorage.com</code>).</p>
+					<p>4. Use Region <code>auto</code> unless you specified a specific jurisdiction.</p>
+				</div>
+			</div>
 			<div class="space-y-4 max-w-2xl">
 				<label class="block">
 					<span class="field-label">S3 Endpoint</span>
