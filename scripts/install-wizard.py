@@ -852,7 +852,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(b'{"success": true}')
-                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                def delayed_shutdown():
+                    import time
+                    time.sleep(1)
+                    self.server.shutdown()
+                threading.Thread(target=delayed_shutdown, daemon=True).start()
             else:
                 self.send_error(400, "Empty payload")
             return
