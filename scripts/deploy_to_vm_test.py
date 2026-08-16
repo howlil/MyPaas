@@ -44,6 +44,14 @@ class DeployToVmTest(unittest.TestCase):
         self.assertIn('$DOCKER_BIN pull "$DASHBOARD_IMAGE_REPO:$MYPAAS_IMAGE_TAG"', content)
         self.assertIn("Wait for the Docker publish workflow to finish", content)
 
+    def test_database_restore_recreates_api_for_runtime_reconciliation(self) -> None:
+        content = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("RESTORED_CONTROL_PLANE_DB=false", content)
+        self.assertIn("RESTORED_CONTROL_PLANE_DB=true", content)
+        self.assertIn('if [[ "$RESTORED_CONTROL_PLANE_DB" == "true" ]]; then', content)
+        self.assertIn('up -d --force-recreate api', content)
+
 
 if __name__ == "__main__":
     unittest.main()

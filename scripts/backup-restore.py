@@ -207,6 +207,38 @@ def active_project_names(postgres_user: str, postgres_db: str) -> set[str]:
     return {line.strip() for line in completed.stdout.decode().splitlines() if line.strip()}
 
 
+def active_project_volume_names(postgres_user: str, postgres_db: str) -> set[str]:
+    query = "SELECT name, deploy_mode FROM projects WHERE deleted_at IS NULL ORDER BY name"
+    completed = run([
+        "docker",
+        "exec",
+        "mypaas-postgres-prod",
+        "psql",
+        "-X",
+        "-A",
+        "-F",
+        "\t",
+        "-t",
+        "-U",
+        postgres_user,
+        "-d",
+        postgres_db,
+        "-c",
+        query,
+    ])
+    names: set[str] = set()
+    for line in completed.stdout.decode().splitlines():
+        parts = line.strip().split("\t")
+        if not parts or not parts[0]:
+            continue
+        name = parts[0].strip()
+        deploy_mode = parts[1].strip() if len(parts) > 1 else ""
+        names.add(name)
+        if deploy_mode == "compose":
+            names.add(f"mypaas-{name}")
+    return names
+
+
 def control_json_query(postgres_user: str, postgres_db: str, sql: str) -> list[dict[str, Any]]:
     wrapped = f"SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM ({sql}) t"
     raw = run_text([
@@ -253,6 +285,19 @@ def route_body(host: str, api_base: str = "http://127.0.0.1") -> str:
     return run_text(["curl", "-fsS", "--max-time", "15", "-H", f"Host: {host}", api_base + "/"])
 
 
+def wait_for_route_body(host: str, api_base: str = "http://127.0.0.1", timeout_seconds: float = 120.0, interval_seconds: float = 3.0) -> str:
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    last_error: BackupRestoreError | None = None
+    while True:
+        try:
+            return route_body(host, api_base)
+        except BackupRestoreError as exc:
+            last_error = exc
+        if time.monotonic() >= deadline:
+            raise BackupRestoreError(f"route {host} did not become healthy within {timeout_seconds:g} seconds: {last_error}")
+        time.sleep(interval_seconds)
+
+
 def fixture_fail(failures: list[dict[str, str]], check: str, reason: str) -> None:
     failures.append({"check": check, "reason": reason})
 
@@ -282,10 +327,11 @@ def verify_route_fixture(
     project: dict[str, Any],
     public_domain: str,
     expected_content: str | None,
+    route_timeout_seconds: float = 120.0,
 ) -> None:
     host = host_for_project(project, public_domain)
     try:
-        body = route_body(host)
+        body = wait_for_route_body(host, timeout_seconds=route_timeout_seconds)
     except BackupRestoreError as exc:
         fixture_fail(failures, check_name, f"route {host} is unhealthy: {exc}")
         return
@@ -462,6 +508,7 @@ def preflight_source_fixtures(args: argparse.Namespace) -> int:
     if not public_domain:
         raise BackupRestoreError("publicDomain is required in fixture spec or PUBLIC_DOMAIN")
     api_base = str(spec.get("apiBase") or DEFAULT_LOCAL_API)
+    route_timeout_seconds = float(spec.get("routeTimeoutSeconds", 120))
     static_root = pathlib.Path(args.static_root)
     compose_root = pathlib.Path(args.compose_root)
 
@@ -473,7 +520,7 @@ def preflight_source_fixtures(args: argparse.Namespace) -> int:
         project = require_project(failures, postgres_user, postgres_db, str(static_spec.get("projectName") or ""), "static")
         if project:
             verify_static_sentinel(failures, project, static_root, str(static_spec.get("sentinelPath") or "index.html"), static_spec.get("expectedContent"))
-            verify_route_fixture(failures, "static", project, public_domain, static_spec.get("expectedContent"))
+            verify_route_fixture(failures, "static", project, public_domain, static_spec.get("expectedContent"), route_timeout_seconds)
         checks.append("static")
     else:
         fixture_fail(failures, "static", "static fixture is missing from spec")
@@ -487,7 +534,7 @@ def preflight_source_fixtures(args: argparse.Namespace) -> int:
                 fixture_fail(failures, "container", f"expected image/dockerfile project, got {mode}")
             if not project.get("app_port"):
                 fixture_fail(failures, "container", "container fixture has no app_port")
-            verify_route_fixture(failures, "container", project, public_domain, container_spec.get("expectedContent"))
+            verify_route_fixture(failures, "container", project, public_domain, container_spec.get("expectedContent"), route_timeout_seconds)
         checks.append("container")
     else:
         fixture_fail(failures, "container", "container fixture is missing from spec")
@@ -504,7 +551,7 @@ def preflight_source_fixtures(args: argparse.Namespace) -> int:
     if isinstance(compose_spec, dict):
         compose_project = require_project(failures, postgres_user, postgres_db, str(compose_spec.get("projectName") or ""), "compose")
         if compose_project:
-            verify_route_fixture(failures, "composeDatabase", compose_project, public_domain, compose_spec.get("expectedContent"))
+            verify_route_fixture(failures, "composeDatabase", compose_project, public_domain, compose_spec.get("expectedContent"), route_timeout_seconds)
             verify_compose_workspace(failures, compose_project, compose_root, compose_spec)
         verify_compose_database_sentinel(failures, compose_spec)
         checks.append("composeDatabase")
@@ -585,6 +632,12 @@ def validate_fixture_manifest(args: argparse.Namespace) -> int:
     expected_volume = (spec.get("persistentVolume") or {}).get("volumeName") if isinstance(spec.get("persistentVolume"), dict) else None
     if expected_volume and all(record.get("volumeName") != expected_volume for record in volume_records):
         fixture_fail(failures, "manifest", f"expected persistent volume {expected_volume} was not captured")
+    compose_spec = spec.get("composeDatabase")
+    expected_compose_volume = str(compose_spec.get("volumeName") or "").strip() if isinstance(compose_spec, dict) else ""
+    if not expected_compose_volume:
+        fixture_fail(failures, "manifest", "composeDatabase.volumeName must identify the expected Compose DB volume")
+    elif all(record.get("volumeName") != expected_compose_volume for record in volume_records):
+        fixture_fail(failures, "manifest", f"expected Compose DB volume {expected_compose_volume} was not captured")
 
     report = {
         "schemaVersion": 1,
@@ -694,6 +747,39 @@ def restore_control_database(dump_path: pathlib.Path, postgres_user: str, postgr
         "-d",
         postgres_db,
     ], input_bytes=payload)
+
+
+def recreate_api_if_present(install_dir: pathlib.Path, env_file: pathlib.Path, compose_file: pathlib.Path) -> bool:
+    completed = run([
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--env-file",
+        str(env_file),
+        "ps",
+        "--all",
+        "-q",
+        "api",
+    ], check=False)
+    if completed.returncode != 0:
+        message = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise BackupRestoreError(f"cannot inspect API service before restore reconciliation: {message[:1000]}")
+    if not completed.stdout.decode().strip():
+        return False
+    run([
+        "docker",
+        "compose",
+        "-f",
+        str(compose_file),
+        "--env-file",
+        str(env_file),
+        "up",
+        "-d",
+        "--force-recreate",
+        "api",
+    ])
+    return True
 
 
 def ensure_postgres(install_dir: pathlib.Path, env_file: pathlib.Path, compose_file: pathlib.Path, postgres_user: str, postgres_db: str) -> None:
@@ -816,7 +902,8 @@ def backup(args: argparse.Namespace) -> int:
     files.append(file_record("compose-workspaces", output, compose_archive))
 
     projects = active_project_names(postgres_user, postgres_db)
-    volumes = discover_managed_volumes(projects)
+    volume_project_names = active_project_volume_names(postgres_user, postgres_db)
+    volumes = discover_managed_volumes(volume_project_names)
     active: dict[str, list[str]] = {volume.name: running_containers_for_volume(volume.name) for volume in volumes}
     in_use = sorted({container for rows in active.values() for container in rows})
     if in_use and not args.quiesce_managed_containers:
@@ -942,6 +1029,7 @@ def restore(args: argparse.Namespace) -> int:
 
     ensure_postgres(install_dir, target_env, compose_file, postgres_user, postgres_db)
     restore_control_database(bundle / str(db_record["path"]), postgres_user, postgres_db)
+    api_recreated = recreate_api_if_present(install_dir, target_env, compose_file)
 
     report = {
         "schemaVersion": 1,
@@ -955,6 +1043,7 @@ def restore(args: argparse.Namespace) -> int:
         "staticArtifactsRestored": True,
         "composeWorkspacesRestored": True,
         "managedVolumesRestored": len(volume_records),
+        "apiRecreatedAfterDatabaseRestore": api_recreated,
         "status": "PASS",
         "nextStep": "run deploy-to-vm.sh, verify-production.sh, then execute the fresh-VM beta acceptance checks",
     }

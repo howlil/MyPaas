@@ -569,6 +569,14 @@ func (s *Service) UpdateProjectRoute(ctx context.Context, before, after db.Proje
 }
 
 func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
+	s.runDeploymentWithFailureStatus(projectID, deploymentID, "")
+}
+
+func (s *Service) runRecoveryDeployment(projectID, deploymentID uuid.UUID) {
+	s.runDeploymentWithFailureStatus(projectID, deploymentID, "crashed")
+}
+
+func (s *Service) runDeploymentWithFailureStatus(projectID, deploymentID uuid.UUID, failureStatus string) {
 	lock := s.projectLock(projectID)
 	lock.Lock()
 	defer lock.Unlock()
@@ -576,18 +584,25 @@ func (s *Service) runDeployment(projectID, deploymentID uuid.UUID) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(s.cfg.BuildTimeoutMinutes)*time.Minute)
 	defer cancel()
 
+	fallbackStatus := "pending"
+	if failureStatus != "" {
+		fallbackStatus = failureStatus
+	}
 	if err := s.acquireDeploySlot(ctx); err != nil {
-		s.fail(ctx, deploymentID, projectID, "pending", err)
+		s.fail(ctx, deploymentID, projectID, fallbackStatus, err)
 		return
 	}
 	defer s.releaseDeploySlot()
 
 	project, err := s.project(ctx, projectID)
 	if err != nil {
-		s.fail(ctx, deploymentID, projectID, "pending", err)
+		s.fail(ctx, deploymentID, projectID, fallbackStatus, err)
 		return
 	}
 	originalStatus := project.Status
+	if failureStatus != "" {
+		originalStatus = failureStatus
+	}
 	if err := s.queries.UpdateProjectStatus(ctx, db.UpdateProjectStatusParams{ID: project.ID, Status: "building"}); err != nil {
 		s.fail(ctx, deploymentID, projectID, originalStatus, err)
 		return

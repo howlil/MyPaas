@@ -23,6 +23,7 @@ EXPLICIT_IMAGE_TAG_SET="${MYPAAS_IMAGE_TAG+x}"
 EXPLICIT_IMAGE_TAG="${MYPAAS_IMAGE_TAG:-}"
 EXPLICIT_BUILD_SHA_SET="${MYPAAS_BUILD_SHA+x}"
 EXPLICIT_BUILD_SHA="${MYPAAS_BUILD_SHA:-}"
+RESTORED_CONTROL_PLANE_DB=false
 
 cd "$ROOT_DIR"
 
@@ -158,6 +159,7 @@ if [[ -f "/tmp/mypaas-database.sql" ]]; then
   echo "Found database backup, restoring..."
   cat /tmp/mypaas-database.sql | $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T -i postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
   rm -f /tmp/mypaas-database.sql
+  RESTORED_CONTROL_PLANE_DB=true
   echo "Database restored successfully."
 fi
 
@@ -177,5 +179,9 @@ if [[ "$SKIP_IMAGE_PULL" != "true" ]]; then
   $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" pull
 fi
 $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
+if [[ "$RESTORED_CONTROL_PLANE_DB" == "true" ]]; then
+  echo "Recreating API after database restore to trigger runtime reconciliation..."
+  $COMPOSE_BIN -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --force-recreate api
+fi
 
 echo "MyPaas production stack is starting. Run scripts/verify-production.sh after the containers settle."
