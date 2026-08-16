@@ -57,10 +57,19 @@ func evaluateComposeReadiness(state composeContainerState) (bool, error) {
 		}
 	}
 
-	if state.Health == nil {
+	// Docker reports no Health object for containers without a healthcheck,
+	// while Docker-compatible runtimes such as Podman may expose an empty
+	// Health object. Treat an empty health status as "no healthcheck" so a
+	// running service is not held in readiness until timeout.
+	healthStatus := ""
+	if state.Health != nil {
+		healthStatus = strings.ToLower(strings.TrimSpace(state.Health.Status))
+	}
+	if healthStatus == "" {
 		return true, nil
 	}
-	switch strings.ToLower(strings.TrimSpace(state.Health.Status)) {
+
+	switch healthStatus {
 	case "healthy":
 		return true, nil
 	case "unhealthy":
@@ -116,7 +125,7 @@ func (d *DockerCLI) WaitComposeServiceReady(ctx context.Context, projectName, se
 			if ready {
 				return nil
 			}
-		} else if !errors.Is(err, ErrNoContainer) {
+		} else if !errors.Is(err, ErrNoContainer) && waitCtx.Err() == nil {
 			return err
 		}
 
@@ -124,7 +133,7 @@ func (d *DockerCLI) WaitComposeServiceReady(ctx context.Context, projectName, se
 		case <-waitCtx.Done():
 			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
 				health := "none"
-				if last.Health != nil {
+				if last.Health != nil && strings.TrimSpace(last.Health.Status) != "" {
 					health = last.Health.Status
 				}
 				return fmt.Errorf("compose service %q readiness timeout after %s (status=%s health=%s)", service, timeout, last.Status, health)
