@@ -38,6 +38,18 @@ func (s *Service) Allocate(ctx context.Context, projectID uuid.UUID) (int32, err
 	defer tx.Rollback(ctx)
 
 	queries := db.New(tx)
+
+	// A failed runtime cleanup can intentionally retain the registry ownership
+	// of a still-bound port. Reuse that ownership for the same project instead
+	// of leaking another port or making a retry collide with its own runtime.
+	if existing, lookupErr := queries.GetPortByProject(ctx, pgUUID(projectID)); lookupErr == nil {
+		if existing.Status == "in_use" {
+			return existing.Port, nil
+		}
+	} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
+		return 0, fmt.Errorf("lookup existing project port: %w", lookupErr)
+	}
+
 	port, err := queries.AcquireAvailablePort(ctx)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -67,6 +79,13 @@ func (s *Service) Release(ctx context.Context, projectID uuid.UUID) error {
 }
 
 func (s *Service) ReleasePort(ctx context.Context, port int32) error {
+	// Never advertise a host port as available while a container/process still
+	// owns the binding. Failed Compose deployments rely on this guard so the DB
+	// registry cannot diverge from the actual runtime and trigger a collision
+	// cascade in later deployments.
+	if !canBind(port) {
+		return fmt.Errorf("refuse to release port %d while host binding is still active", port)
+	}
 	queries := db.New(s.pool)
 	return queries.ReleasePort(ctx, port)
 }
