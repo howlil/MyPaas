@@ -3,9 +3,11 @@
 > Canonical architecture entry point for the current single-host implementation.
 
 **Status:** Current  
-**Applies to:** `main`  
-**Last verified:** 2026-08-13  
-**Verified against commit:** `8769f0bb5373e8ec8ca584d6e2cbbf6fb5820cbf`
+**Applies to:** `main` and the `v0.5.0-beta.1` release line  
+**Last verified:** 2026-08-16  
+**Verified against runtime candidate:** `ddc26c9a0f877fc5dd4133d6559c5f36123d6a31`
+
+Later documentation-only release commits do not change the runtime architecture described here.
 
 ---
 
@@ -145,7 +147,9 @@ VM export performs storage preflight before downtime, quiesces runtime workloads
 
 Repository CI verifies code, race safety, frontend checks/build, script regressions, production Compose rendering, and Docker/Podman command-contract behavior. `scripts/verify-production.sh` validates live production topology including API readiness, network membership, configured statd service/socket, the Caddy Admin Unix socket, and the absence of a published Caddy TCP admin endpoint.
 
-Real-host performance and final production behavior remain staging/benchmark concerns; they are not inferred solely from CI.
+The beta-readiness program adds controlled runtime evidence for update safety, fresh restore, performance, resilience, retention, Create Project behavior, and DB Studio reliability. See `docs/engineering/beta-readiness-gates.md` for tested SHAs and evidence provenance.
+
+Real-world performance outside the tested host/workload shape remains installation-specific and is not inferred solely from CI or the beta benchmark result.
 
 ## Detailed architecture
 
