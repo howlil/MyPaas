@@ -40,6 +40,15 @@ func TestEvaluateComposeReadiness(t *testing.T) {
 			wantReady: true,
 		},
 		{
+			name: "running with empty docker compatible health state",
+			state: composeContainerState{
+				Status:  "running",
+				Running: true,
+				Health:  &composeHealthState{},
+			},
+			wantReady: true,
+		},
+		{
 			name: "healthy",
 			state: composeContainerState{
 				Status:  "running",
