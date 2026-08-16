@@ -2,6 +2,7 @@ package container
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -820,12 +821,38 @@ func sanitizeComposeConfig(raw []byte) ([]byte, error) {
 		}
 		delete(service, "ports")
 		delete(service, "container_name")
+
+		if hc, ok := service["healthcheck"].(map[string]any); ok {
+			if test, ok := hc["test"].([]any); ok && len(test) > 1 {
+				if cmd, ok := test[0].(string); ok && cmd == "CMD" {
+					var builder strings.Builder
+					for i := 1; i < len(test); i++ {
+						if i > 1 {
+							builder.WriteString(" ")
+						}
+						arg := fmt.Sprint(test[i])
+						if strings.ContainsAny(arg, " \t\"'") {
+							builder.WriteString("'")
+							builder.WriteString(strings.ReplaceAll(arg, "'", "'\\''"))
+							builder.WriteString("'")
+						} else {
+							builder.WriteString(arg)
+						}
+					}
+					hc["test"] = []any{"CMD-SHELL", builder.String()}
+				}
+			}
+		}
 	}
 
-	out, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
+	buffer := new(bytes.Buffer)
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(doc); err != nil {
 		return nil, fmt.Errorf("write sanitized compose config: %w", err)
 	}
+	out := buffer.Bytes()
 	return append(out, '\n'), nil
 }
 
