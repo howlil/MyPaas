@@ -3,9 +3,9 @@
 > System context and major responsibilities for the current MyPaaS control plane.
 
 **Status:** Current  
-**Applies to:** `main`  
-**Last verified:** 2026-08-13  
-**Verified against commit:** `8769f0bb5373e8ec8ca584d6e2cbbf6fb5820cbf`
+**Applies to:** `main` and the `v0.5.0-beta.1` release line  
+**Last verified:** 2026-08-16  
+**Verified against runtime candidate:** `ddc26c9a0f877fc5dd4133d6559c5f36123d6a31`
 
 ---
 
@@ -24,9 +24,9 @@ flowchart LR
     Caddy --> API
 
     API --> DB[("PostgreSQL")]
-    API --> Engine["Docker-compatible engine"]
+    API --> Engine["Docker-compatible engine contract\nPodman default on fresh hosts"]
     API --> CaddyAdmin["Caddy Admin Unix socket"]
-    API --> Statd["mypaas-statd Unix socket"]
+    API --> Statd["optional mypaas-statd Unix socket"]
 
     Engine --> Apps["Container-backed projects"]
     Caddy --> Apps
@@ -79,7 +79,7 @@ Its production Admin API is reachable only over `/run/mypaas/caddy-admin.sock`, 
 
 ### mypaas-statd
 
-`mypaas-statd` is a host-native systemd daemon. It reads host cgroup v2 data and exposes bounded snapshots over `/run/mypaas/statd.sock`. It is not a privileged sidecar container and does not expand the API container with host `/proc` or cgroup mounts.
+`mypaas-statd` is an optional host-native systemd daemon. It reads host cgroup v2 data and exposes bounded snapshots over `/run/mypaas/statd.sock`. It is not a privileged sidecar container and does not expand the API container with host `/proc` or cgroup mounts. Runtime metrics fall back to the Docker-compatible engine path when statd is disabled or unavailable.
 
 ## Request paths
 
@@ -176,11 +176,13 @@ MyPaaS does not branch its orchestration logic into Docker-specific and Podman-s
 flowchart LR
     Backend["MyPaaS backend"] --> DockerCmd["docker / docker compose command surface"]
     DockerCmd --> Compat["Docker-compatible socket"]
-    Compat --> DockerEngine["Docker Engine"]
-    Compat --> Podman["Rootful Podman"]
+    Compat --> Podman["Rootful Podman\ndefault / recommended"]
+    Compat --> DockerEngine["Docker Engine\nexplicit compatibility mode"]
 ```
 
-This keeps the runtime abstraction small and makes compatibility behavior testable through one command contract.
+Fresh supported Ubuntu/Debian installations default to rootful Podman. The installer enables `podman.socket` and exposes the expected Docker-compatible socket path, so the backend continues to use the same command contract.
+
+Docker Engine remains supported for existing or intentionally Docker-based installations by selecting `USE_PODMAN=false`. This keeps the runtime abstraction small while making Podman the product default rather than presenting both engines as equivalent fresh-install choices.
 
 ## Scope
 

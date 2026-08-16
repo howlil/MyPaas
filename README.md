@@ -8,7 +8,7 @@
 
 MyPaas is a **single-host self-hosted PaaS** for an owner developer or a small trusted team. It aims to provide a deployment workflow closer to Vercel or Railway while keeping the VM, container engine, persistent data, and routing path under your control.
 
-The control plane is built with Go, SvelteKit, PostgreSQL, Caddy, and Cloudflare Tunnel. Container-backed workloads use a Docker-compatible control-plane contract and have been qualified with Docker Engine and Podman-compatible operation. Static projects are served directly by Caddy without a persistent application container.
+The control plane is built with Go, SvelteKit, PostgreSQL, Caddy, and Cloudflare Tunnel. On fresh supported Linux hosts, MyPaas is **Podman-first**: the installer defaults to rootful Podman and exposes its socket through the Docker-compatible command/socket contract used by the control plane. Docker Engine remains supported as an explicit compatibility mode for existing installations and operators that intentionally select it with `USE_PODMAN=false`. Static projects are served directly by Caddy without a persistent application container.
 
 > Beta means the mandatory release gates have passed for the qualified candidate; it does **not** mean MyPaas provides multi-node HA, hard multi-tenant isolation, or hyperscaler-grade operational guarantees.
 
@@ -45,7 +45,7 @@ Git deployments support repository inspection, branch selection, base directorie
 - scoped cleanup of unused MyPaas-managed images and build cache;
 - GitHub OAuth, whitelist-based access, owner/collaborator roles, and audit logs;
 - Prometheus-compatible API metrics plus `/health` and `/ready` endpoints;
-- optional `mypaas-statd` host/runtime telemetry with Docker-compatible fallback.
+- optional `mypaas-statd` host/runtime telemetry with Docker-compatible metrics fallback.
 
 ### Operator tooling
 
@@ -88,9 +88,10 @@ A controlled 10/25/50-project qualification completed the 50-project tier succes
 MyPaas currently targets a deliberately narrow operating model:
 
 - **single Linux host**; no Kubernetes, cluster scheduler, or multi-node HA;
+- **Podman-first fresh-host runtime**; rootful Podman is the installer default, while Docker Engine is an explicit supported compatibility mode;
 - **owner / small trusted-team model**; it is not a hostile multi-tenant isolation boundary;
 - **public OCI registries only**; private-registry credential storage is not implemented;
-- **no in-place Docker → Podman state migration**; use the supported migration/export flow to a fresh host;
+- **no supported in-place Docker → Podman state migration**; use the supported migration/export flow to a fresh host rather than switching a stateful installation in place;
 - performance and capacity are installation-specific;
 - the dashboard does not yet surface a disk-pressure warning UI, although manual and scheduled retention paths are implemented;
 - production Create Project qualification is intentionally non-destructive.
@@ -106,11 +107,13 @@ curl -fsSL https://raw.githubusercontent.com/nabilrn/MyPaas/v0.5.0-beta.1/script
   env MYPAAS_REF=v0.5.0-beta.1 bash
 ```
 
-For Podman on a fresh Ubuntu/Debian host:
+On a fresh supported Ubuntu/Debian host, that command **defaults to rootful Podman**. MyPaas still uses the `docker` / `docker compose` command surface and a Docker-compatible socket internally, so Podman does not require a second orchestration backend.
+
+To intentionally use Docker Engine instead:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nabilrn/MyPaas/v0.5.0-beta.1/scripts/bootstrap.sh | \
-  env MYPAAS_REF=v0.5.0-beta.1 USE_PODMAN=true bash
+  env MYPAAS_REF=v0.5.0-beta.1 USE_PODMAN=false bash
 ```
 
 The setup wizard binds locally and can be exposed temporarily through the supported Cloudflare Quick Tunnel flow or SSH forwarding.
@@ -133,13 +136,13 @@ flowchart TB
     Caddy --> Static["Static releases"]
     Caddy --> Runtime["Explicitly routed runtimes"]
     API --> Postgres[("PostgreSQL")]
-    API --> Engine["Docker-compatible engine contract"]
-    API --> Statd["mypaas-statd Unix socket"]
+    API --> Engine["Podman default / Docker Engine compatibility\nthrough Docker-compatible contract"]
+    API --> Statd["optional mypaas-statd Unix socket"]
     Engine --> Runtime
     Engine --> Workloads["Project workloads"]
 ```
 
-MyPaas intentionally remains a single-host platform. The backend uses a Docker-compatible CLI/socket contract even when Podman is the actual engine.
+MyPaas intentionally remains a single-host platform. Fresh supported Linux installs use rootful Podman by default, while the backend deliberately keeps a Docker-compatible CLI/socket contract so Docker Engine can remain a supported compatibility mode without a second orchestration implementation.
 
 ## Documentation
 

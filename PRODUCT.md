@@ -29,6 +29,16 @@ It connects Git repositories to Dockerfile, Docker Compose, or static deployment
 
 Success means a developer can deploy, diagnose, recover, and maintain a project without repeatedly rebuilding the same infrastructure glue.
 
+## Runtime policy
+
+MyPaas is **Podman-first on fresh supported Linux hosts**.
+
+The installer defaults to rootful Podman and exposes the Podman socket through the Docker-compatible command/socket contract consumed by the control plane. MyPaas therefore keeps one orchestration implementation while using Podman as the preferred fresh-host engine.
+
+Docker Engine remains a supported **explicit compatibility mode** for existing installations and operators that intentionally choose it with `USE_PODMAN=false`. This is compatibility support, not a second preferred default.
+
+`mypaas-statd` is a separate concern: it remains optional host/runtime telemetry because the platform has a Docker-compatible metrics fallback when statd is disabled or unavailable.
+
 ## Current product boundaries
 
 The product deliberately does **not** claim to be:
@@ -44,7 +54,8 @@ Current boundaries include:
 
 - one Linux host per MyPaas installation;
 - owner / small trusted-team access model;
-- Docker-compatible engine contract with qualified Docker Engine and Podman operation;
+- rootful Podman as the fresh-host default behind the Docker-compatible engine contract;
+- Docker Engine as an explicit supported compatibility mode;
 - public OCI registry deployment only; private registry credentials are outside the current implementation;
 - no supported in-place Docker-to-Podman state migration;
 - performance and project capacity depend on host resources and workload shape.

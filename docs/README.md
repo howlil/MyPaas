@@ -46,6 +46,9 @@ Use this order when sources disagree:
 
 Public claims should be narrower than the implementation whenever evidence is ambiguous.
 
+- Describe fresh supported Linux installations as **Podman-first**. Rootful Podman is the installer default (`USE_PODMAN=true`); Docker Engine is an explicit supported compatibility mode selected with `USE_PODMAN=false`.
+- Keep the implementation detail precise: MyPaaS still uses a Docker-compatible `docker` / `docker compose` command and socket contract even when Podman is the actual engine.
+- Do not call Podman optional merely because Docker Engine is also supported. The optional component is `mypaas-statd`, whose metrics path can fall back to the Docker-compatible engine implementation.
 - Do not call MyPaaS multi-node, highly available, or multi-tenant: the current architecture is single-host and intended for an owner or small trusted team.
 - Do not turn the 50-project qualification result into a universal capacity promise. It is evidence for the tested VM shape and fixture mix.
 - Do not claim private-registry authentication. Registry deployment currently targets public OCI images.
@@ -67,8 +70,8 @@ flowchart TB
     Caddy --> Runtime["Explicitly routed runtime"]
 
     API --> Postgres[("PostgreSQL")]
-    API --> Engine["Docker-compatible engine contract"]
-    API --> Statd["mypaas-statd Unix socket"]
+    API --> Engine["Docker-compatible engine contract\nPodman default on fresh hosts"]
+    API --> Statd["optional mypaas-statd Unix socket"]
     Engine --> Runtime
     Engine --> Workloads["Project workloads"]
     Statd --> Cgroup["cgroup v2"]

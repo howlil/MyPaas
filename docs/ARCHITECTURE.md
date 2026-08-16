@@ -25,8 +25,8 @@ flowchart TB
     end
 
     subgraph Host["Linux host"]
-        Engine["Docker Engine or rootful Podman\nthrough Docker-compatible contract"]
-        Statd["mypaas-statd\nsystemd + Unix socket"]
+        Engine["Rootful Podman by default\nDocker Engine compatibility mode\nvia Docker-compatible contract"]
+        Statd["optional mypaas-statd\nsystemd + Unix socket"]
         Cgroup["cgroup v2"]
     end
 
@@ -49,6 +49,8 @@ flowchart TB
 
 MyPaaS targets one Linux VM. It is a self-hosted deployment control plane, not a Kubernetes scheduler, multi-node orchestrator, or mutually hostile multi-tenant sandbox.
 
+Fresh supported Ubuntu/Debian installations are **Podman-first**. `scripts/install-vm.sh` defaults `USE_PODMAN=true`, installs rootful Podman, enables `podman.socket`, and exposes that socket through the Docker-compatible path expected by the control plane. Docker Engine remains supported when an operator explicitly selects `USE_PODMAN=false`.
+
 ## Production components
 
 `docker-compose.prod.yml` runs five control-plane containers:
@@ -61,21 +63,21 @@ MyPaaS targets one Linux VM. It is a self-hosted deployment control plane, not a
 | `caddy` | Dashboard/API ingress, static serving, dynamic project routing | Admin API is Unix-socket only in production |
 | `cloudflared` | Outbound Cloudflare Tunnel client | Control network only |
 
-`mypaas-statd` is host-native and is **not** a sixth Compose service. It runs under systemd and communicates with the API through `/run/mypaas/statd.sock`.
+`mypaas-statd` is host-native and is **not** a sixth Compose service. It runs under systemd and communicates with the API through `/run/mypaas/statd.sock`. It is optional because runtime metrics can fall back to the Docker-compatible engine path when statd is disabled or unavailable.
 
 ## Runtime abstraction
 
-MyPaaS deliberately keeps one engine contract:
+MyPaaS deliberately keeps one engine contract while preferring Podman for fresh Linux hosts:
 
 ```mermaid
 flowchart LR
     API["Go control plane"] --> CLI["docker CLI / docker compose"]
     CLI --> Socket["Docker-compatible socket"]
-    Socket --> Docker["Docker Engine"]
-    Socket --> Podman["Rootful Podman socket compatibility"]
+    Socket --> Podman["Rootful Podman\ndefault / recommended"]
+    Socket --> Docker["Docker Engine\nexplicit compatibility mode"]
 ```
 
-Podman support does not introduce a separate orchestration backend. Production Podman hosts expose the Docker-compatible command/socket surface expected by the control plane.
+Podman is not a second orchestration backend. Production Podman hosts expose the Docker-compatible command/socket surface expected by the control plane. The same contract keeps Docker Engine usable for existing or intentionally Docker-based installations without duplicating orchestration logic.
 
 ## Network model
 
@@ -120,7 +122,7 @@ See [Security boundaries](SECURITY_BOUNDARIES.md).
 
 ## Observability model
 
-Runtime metrics prefer `mypaas-statd` over its local Unix socket. The daemon reads cgroup v2 and avoids repeated Docker/Podman process spawning on the steady-state metrics path. Runtime-statd failure is non-fatal and falls back to the Docker-compatible implementation.
+Runtime metrics prefer `mypaas-statd` over its local Unix socket when statd is installed and configured. The daemon reads cgroup v2 and avoids repeated Docker/Podman process spawning on the steady-state metrics path. Runtime-statd failure is non-fatal and falls back to the Docker-compatible implementation.
 
 With the current v0.2.0 rollout, host stats can also include optional CPU, memory, storage, and network snapshots from statd. Capacity/allocation values remain available when host telemetry is disabled or unavailable.
 
