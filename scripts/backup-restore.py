@@ -14,7 +14,9 @@ configuration values.
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as dt
+import hmac
 import hashlib
 import json
 import os
@@ -35,6 +37,7 @@ DEFAULT_STATIC_ROOT = "/var/lib/mypaas/static"
 DEFAULT_COMPOSE_ROOT = "/var/lib/mypaas/compose"
 MANAGED_LABEL = "mypaas.managed"
 MANAGED_VALUE = "true"
+DEFAULT_LOCAL_API = "http://127.0.0.1:8080"
 
 
 class BackupRestoreError(RuntimeError):
@@ -74,6 +77,10 @@ def required_env(values: dict[str, str], key: str) -> str:
     return value
 
 
+def sql_literal(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
 def run(
     args: list[str],
     *,
@@ -104,6 +111,10 @@ def run(
         message = completed.stderr.decode("utf-8", errors="replace").strip()
         raise BackupRestoreError(f"command failed ({args[0]}): {message[:1000]}")
     return completed
+
+
+def run_text(args: list[str], *, check: bool = True) -> str:
+    return run(args, check=check).stdout.decode("utf-8", errors="replace")
 
 
 def sha256_file(path: pathlib.Path) -> str:
@@ -194,6 +205,402 @@ def active_project_names(postgres_user: str, postgres_db: str) -> set[str]:
         query,
     ])
     return {line.strip() for line in completed.stdout.decode().splitlines() if line.strip()}
+
+
+def control_json_query(postgres_user: str, postgres_db: str, sql: str) -> list[dict[str, Any]]:
+    wrapped = f"SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) FROM ({sql}) t"
+    raw = run_text([
+        "docker",
+        "exec",
+        "mypaas-postgres-prod",
+        "psql",
+        "-X",
+        "-A",
+        "-t",
+        "-U",
+        postgres_user,
+        "-d",
+        postgres_db,
+        "-c",
+        wrapped,
+    ]).strip()
+    data = json.loads(raw or "[]")
+    if not isinstance(data, list):
+        raise BackupRestoreError("control-plane query did not return a JSON array")
+    return data
+
+
+def project_by_name(postgres_user: str, postgres_db: str, name: str) -> dict[str, Any] | None:
+    rows = control_json_query(
+        postgres_user,
+        postgres_db,
+        "SELECT id::text, name, subdomain, deploy_mode, status, app_port, allocated_port "
+        "FROM projects WHERE deleted_at IS NULL AND name = " + sql_literal(name),
+    )
+    if not rows:
+        return None
+    return rows[0]
+
+
+def host_for_project(project: dict[str, Any], public_domain: str) -> str:
+    subdomain = str(project.get("subdomain") or project.get("name") or "").strip()
+    if not subdomain:
+        raise BackupRestoreError("project is missing subdomain")
+    return f"{subdomain}.{public_domain}"
+
+
+def route_body(host: str, api_base: str = "http://127.0.0.1") -> str:
+    return run_text(["curl", "-fsS", "--max-time", "15", "-H", f"Host: {host}", api_base + "/"])
+
+
+def fixture_fail(failures: list[dict[str, str]], check: str, reason: str) -> None:
+    failures.append({"check": check, "reason": reason})
+
+
+def require_project(
+    failures: list[dict[str, str]],
+    postgres_user: str,
+    postgres_db: str,
+    name: str,
+    deploy_mode: str | None = None,
+    status: str | None = "running",
+) -> dict[str, Any] | None:
+    project = project_by_name(postgres_user, postgres_db, name)
+    if project is None:
+        fixture_fail(failures, name, "project is missing")
+        return None
+    if deploy_mode and project.get("deploy_mode") != deploy_mode:
+        fixture_fail(failures, name, f"expected deploy_mode={deploy_mode}, got {project.get('deploy_mode')}")
+    if status and project.get("status") != status:
+        fixture_fail(failures, name, f"expected status={status}, got {project.get('status')}")
+    return project
+
+
+def verify_route_fixture(
+    failures: list[dict[str, str]],
+    check_name: str,
+    project: dict[str, Any],
+    public_domain: str,
+    expected_content: str | None,
+) -> None:
+    host = host_for_project(project, public_domain)
+    try:
+        body = route_body(host)
+    except BackupRestoreError as exc:
+        fixture_fail(failures, check_name, f"route {host} is unhealthy: {exc}")
+        return
+    if expected_content is not None and expected_content not in body:
+        fixture_fail(failures, check_name, f"route {host} did not contain expected sentinel content")
+
+
+def verify_static_sentinel(
+    failures: list[dict[str, str]],
+    project: dict[str, Any],
+    static_root: pathlib.Path,
+    sentinel_path: str,
+    expected_content: str | None,
+) -> None:
+    rel = pathlib.PurePosixPath(sentinel_path)
+    if rel.is_absolute() or ".." in rel.parts:
+        fixture_fail(failures, "static", "static sentinel path must be relative and stay inside the project static root")
+        return
+    path = static_root / str(project["id"]) / pathlib.Path(*rel.parts)
+    if not path.is_file():
+        fixture_fail(failures, "static", f"static sentinel file is missing: {path}")
+        return
+    if expected_content is not None and expected_content not in path.read_text(encoding="utf-8", errors="replace"):
+        fixture_fail(failures, "static", "static sentinel file does not contain expected content")
+
+
+def verify_persistent_volume_fixture(failures: list[dict[str, str]], fixture: dict[str, Any]) -> None:
+    volume_name = str(fixture.get("volumeName") or "").strip()
+    sentinel_path = str(fixture.get("sentinelPath") or "").strip()
+    if not volume_name or not sentinel_path:
+        fixture_fail(failures, "persistentVolume", "volumeName and sentinelPath are required")
+        return
+    rows = docker_json(["volume", "inspect", volume_name])
+    if not isinstance(rows, list) or not rows:
+        fixture_fail(failures, "persistentVolume", f"volume is missing: {volume_name}")
+        return
+    mountpoint = pathlib.Path(str(rows[0].get("Mountpoint") or ""))
+    rel = pathlib.PurePosixPath(sentinel_path)
+    if rel.is_absolute() or ".." in rel.parts:
+        fixture_fail(failures, "persistentVolume", "sentinelPath must be relative and stay inside the volume")
+        return
+    sentinel = mountpoint / pathlib.Path(*rel.parts)
+    if not sentinel.is_file():
+        fixture_fail(failures, "persistentVolume", f"persistent sentinel file is missing in {volume_name}")
+        return
+    if "expectedSha256" in fixture:
+        if sha256_file(sentinel) != str(fixture["expectedSha256"]):
+            fixture_fail(failures, "persistentVolume", "persistent sentinel checksum mismatch")
+    expected = fixture.get("expectedContent")
+    if expected is not None and str(expected) not in sentinel.read_text(encoding="utf-8", errors="replace"):
+        fixture_fail(failures, "persistentVolume", "persistent sentinel content mismatch")
+
+
+def verify_compose_workspace(
+    failures: list[dict[str, str]],
+    project: dict[str, Any],
+    compose_root: pathlib.Path,
+    fixture: dict[str, Any],
+) -> None:
+    candidates = [compose_root / str(project["id"]), compose_root / str(project["name"])]
+    if fixture.get("workspacePath"):
+        candidates.insert(0, pathlib.Path(str(fixture["workspacePath"])))
+    if not any(path.exists() and any(path.rglob("*")) for path in candidates):
+        fixture_fail(failures, "composeDatabase", "compose workspace is missing or empty")
+
+
+def verify_compose_database_sentinel(failures: list[dict[str, str]], fixture: dict[str, Any]) -> None:
+    service = str(fixture.get("serviceContainer") or "").strip()
+    command = fixture.get("sentinelCommand")
+    expected = fixture.get("expectedOutput")
+    if not service or not isinstance(command, list) or not command:
+        fixture_fail(failures, "composeDatabase", "serviceContainer and sentinelCommand are required")
+        return
+    try:
+        output = run_text(["docker", "exec", service, *[str(part) for part in command]]).strip()
+    except BackupRestoreError as exc:
+        fixture_fail(failures, "composeDatabase", f"database sentinel command failed: {exc}")
+        return
+    if expected is not None and str(expected).strip() not in output:
+        fixture_fail(failures, "composeDatabase", "database sentinel row/value was not observed")
+
+
+def jwt_segment(payload: dict[str, Any]) -> str:
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+
+def issue_internal_access_token(env: dict[str, str], postgres_user: str, postgres_db: str) -> str:
+    jwt_secret = required_env(env, "JWT_SECRET")
+    rows = control_json_query(
+        postgres_user,
+        postgres_db,
+        "SELECT id::text, email, role FROM users ORDER BY created_at LIMIT 1",
+    )
+    if not rows:
+        raise BackupRestoreError("cannot verify authenticated fixture checks because no restored user exists")
+    user = rows[0]
+    now = int(time.time())
+    claims = {
+        "userId": user["id"],
+        "email": user["email"],
+        "role": user["role"],
+        "tokenUse": "access",
+        "sub": user["id"],
+        "exp": now + 300,
+        "iat": now,
+    }
+    signing_input = jwt_segment({"alg": "HS256", "typ": "JWT"}) + "." + jwt_segment(claims)
+    signature = hmac.new(jwt_secret.encode("utf-8"), signing_input.encode("ascii"), hashlib.sha256).digest()
+    return signing_input + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode("ascii")
+
+
+def api_json(path: str, token: str, api_base: str) -> Any:
+    raw = run_text(["curl", "-fsS", "--max-time", "15", "-H", f"Authorization: Bearer {token}", api_base.rstrip("/") + path])
+    return json.loads(raw or "{}")
+
+
+def verify_dbstudio_fixture(
+    failures: list[dict[str, str]],
+    project: dict[str, Any],
+    token: str,
+    api_base: str,
+) -> None:
+    project_id = str(project["id"])
+    try:
+        status_payload = api_json(f"/projects/{project_id}/db/status", token, api_base)
+        schemas_payload = api_json(f"/projects/{project_id}/db/schemas", token, api_base)
+    except BackupRestoreError as exc:
+        fixture_fail(failures, "dbStudio", f"DB Studio API check failed: {exc}")
+        return
+    status_data = status_payload.get("data", status_payload) if isinstance(status_payload, dict) else {}
+    schemas_data = schemas_payload.get("data", schemas_payload) if isinstance(schemas_payload, dict) else {}
+    if not status_data.get("configured"):
+        fixture_fail(failures, "dbStudio", "DB Studio status is not configured")
+    if not isinstance(schemas_data, list):
+        fixture_fail(failures, "dbStudio", "DB Studio schemas response is not a list")
+    write_access = status_data.get("writeAccess")
+    if write_access not in (None, False):
+        fixture_fail(failures, "dbStudio", "DB Studio write access is enabled before an explicit write session")
+
+
+def verify_encrypted_env_fixture(
+    failures: list[dict[str, str]],
+    project: dict[str, Any],
+    key: str,
+    token: str,
+    api_base: str,
+) -> None:
+    try:
+        payload = api_json(f"/projects/{project['id']}/env/{key}/reveal", token, api_base)
+    except BackupRestoreError as exc:
+        fixture_fail(failures, "encryptedEnv", f"encrypted env reveal failed: {exc}")
+        return
+    data = payload.get("data", payload) if isinstance(payload, dict) else {}
+    if not data.get("value"):
+        fixture_fail(failures, "encryptedEnv", "encrypted env value did not decrypt to a non-empty value")
+
+
+def load_fixture_spec(path: pathlib.Path) -> dict[str, Any]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise BackupRestoreError("fixture spec must be a JSON object")
+    return data
+
+
+def preflight_source_fixtures(args: argparse.Namespace) -> int:
+    spec = load_fixture_spec(pathlib.Path(args.spec))
+    install_dir = pathlib.Path(args.install_dir).resolve()
+    env_file = pathlib.Path(args.env_file or install_dir / ".env").resolve()
+    env = parse_env_file(env_file)
+    postgres_user = required_env(env, "POSTGRES_USER")
+    postgres_db = required_env(env, "POSTGRES_DB")
+    public_domain = str(spec.get("publicDomain") or env.get("PUBLIC_DOMAIN") or "").strip()
+    if not public_domain:
+        raise BackupRestoreError("publicDomain is required in fixture spec or PUBLIC_DOMAIN")
+    api_base = str(spec.get("apiBase") or DEFAULT_LOCAL_API)
+    static_root = pathlib.Path(args.static_root)
+    compose_root = pathlib.Path(args.compose_root)
+
+    failures: list[dict[str, str]] = []
+    checks: list[str] = []
+
+    static_spec = spec.get("static")
+    if isinstance(static_spec, dict):
+        project = require_project(failures, postgres_user, postgres_db, str(static_spec.get("projectName") or ""), "static")
+        if project:
+            verify_static_sentinel(failures, project, static_root, str(static_spec.get("sentinelPath") or "index.html"), static_spec.get("expectedContent"))
+            verify_route_fixture(failures, "static", project, public_domain, static_spec.get("expectedContent"))
+        checks.append("static")
+    else:
+        fixture_fail(failures, "static", "static fixture is missing from spec")
+
+    container_spec = spec.get("container")
+    if isinstance(container_spec, dict):
+        project = require_project(failures, postgres_user, postgres_db, str(container_spec.get("projectName") or ""))
+        if project:
+            mode = project.get("deploy_mode")
+            if mode not in ("image", "dockerfile"):
+                fixture_fail(failures, "container", f"expected image/dockerfile project, got {mode}")
+            if not project.get("app_port"):
+                fixture_fail(failures, "container", "container fixture has no app_port")
+            verify_route_fixture(failures, "container", project, public_domain, container_spec.get("expectedContent"))
+        checks.append("container")
+    else:
+        fixture_fail(failures, "container", "container fixture is missing from spec")
+
+    volume_spec = spec.get("persistentVolume")
+    if isinstance(volume_spec, dict):
+        verify_persistent_volume_fixture(failures, volume_spec)
+        checks.append("persistentVolume")
+    else:
+        fixture_fail(failures, "persistentVolume", "persistent volume fixture is missing from spec")
+
+    compose_spec = spec.get("composeDatabase")
+    compose_project = None
+    if isinstance(compose_spec, dict):
+        compose_project = require_project(failures, postgres_user, postgres_db, str(compose_spec.get("projectName") or ""), "compose")
+        if compose_project:
+            verify_route_fixture(failures, "composeDatabase", compose_project, public_domain, compose_spec.get("expectedContent"))
+            verify_compose_workspace(failures, compose_project, compose_root, compose_spec)
+        verify_compose_database_sentinel(failures, compose_spec)
+        checks.append("composeDatabase")
+    else:
+        fixture_fail(failures, "composeDatabase", "compose database fixture is missing from spec")
+
+    try:
+        token = issue_internal_access_token(env, postgres_user, postgres_db)
+    except BackupRestoreError as exc:
+        token = ""
+        fixture_fail(failures, "auth", str(exc))
+
+    dbstudio_spec = spec.get("dbStudio")
+    if isinstance(dbstudio_spec, dict) and token:
+        db_project_name = str(dbstudio_spec.get("projectName") or (compose_spec or {}).get("projectName") or "")
+        db_project = compose_project if compose_project and compose_project.get("name") == db_project_name else require_project(failures, postgres_user, postgres_db, db_project_name)
+        if db_project:
+            verify_dbstudio_fixture(failures, db_project, token, api_base)
+        checks.append("dbStudio")
+    elif not isinstance(dbstudio_spec, dict):
+        fixture_fail(failures, "dbStudio", "DB Studio fixture is missing from spec")
+
+    env_spec = spec.get("encryptedEnv")
+    if isinstance(env_spec, dict) and token:
+        env_project = require_project(failures, postgres_user, postgres_db, str(env_spec.get("projectName") or ""))
+        key = str(env_spec.get("key") or "").strip()
+        if not key:
+            fixture_fail(failures, "encryptedEnv", "encrypted env key is required")
+        elif env_project:
+            verify_encrypted_env_fixture(failures, env_project, key, token, api_base)
+        checks.append("encryptedEnv")
+    elif not isinstance(env_spec, dict):
+        fixture_fail(failures, "encryptedEnv", "encrypted env fixture is missing from spec")
+
+    report = {
+        "schemaVersion": 1,
+        "kind": "backup-restore-source-preflight",
+        "checkedAt": utc_now(),
+        "sourceGitSha": git_sha(install_dir),
+        "checks": checks,
+        "status": "FAIL" if failures else "PASS",
+        "failures": failures,
+        "secretsExposed": False,
+    }
+    if args.report:
+        write_json_private(pathlib.Path(args.report), report)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 1 if failures else 0
+
+
+def archive_has_entries(path: pathlib.Path) -> bool:
+    with tarfile.open(path, "r:gz") as archive:
+        return any(member.name and member.name != "." for member in archive.getmembers())
+
+
+def validate_fixture_manifest(args: argparse.Namespace) -> int:
+    spec = load_fixture_spec(pathlib.Path(args.spec))
+    bundle = pathlib.Path(args.bundle).resolve()
+    verify_bundle(bundle)
+    manifest = load_manifest(bundle)
+    failures: list[dict[str, str]] = []
+    records = manifest.get("files", [])
+    kinds = [record.get("kind") for record in records]
+    if "static-artifacts" not in kinds:
+        fixture_fail(failures, "manifest", "static-artifacts record is missing")
+    if "compose-workspaces" not in kinds:
+        fixture_fail(failures, "manifest", "compose-workspaces record is missing")
+
+    for kind in ("static-artifacts", "compose-workspaces"):
+        record = next((item for item in records if item.get("kind") == kind), None)
+        if record and not archive_has_entries(bundle / str(record["path"])):
+            fixture_fail(failures, "manifest", f"{kind} archive is empty")
+
+    min_volumes = int(spec.get("manifest", {}).get("minManagedVolumes", 1) if isinstance(spec.get("manifest"), dict) else 1)
+    volume_records = [record for record in records if record.get("kind") == "managed-volume"]
+    if len(volume_records) < min_volumes:
+        fixture_fail(failures, "manifest", f"expected at least {min_volumes} managed-volume records, got {len(volume_records)}")
+    expected_volume = (spec.get("persistentVolume") or {}).get("volumeName") if isinstance(spec.get("persistentVolume"), dict) else None
+    if expected_volume and all(record.get("volumeName") != expected_volume for record in volume_records):
+        fixture_fail(failures, "manifest", f"expected persistent volume {expected_volume} was not captured")
+
+    report = {
+        "schemaVersion": 1,
+        "kind": "backup-restore-fixture-manifest-validation",
+        "checkedAt": utc_now(),
+        "sourceGitSha": manifest.get("sourceGitSha", "unknown"),
+        "projectCount": manifest.get("projectCount"),
+        "managedVolumeCount": manifest.get("managedVolumeCount"),
+        "status": "FAIL" if failures else "PASS",
+        "failures": failures,
+        "secretsExposed": False,
+    }
+    if args.report:
+        write_json_private(pathlib.Path(args.report), report)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 1 if failures else 0
 
 
 def classify_volume(info: dict[str, Any], project_names: set[str]) -> str | None:
@@ -571,6 +978,8 @@ def plan(args: argparse.Namespace) -> int:
         "backupConsistency": "running managed-volume consumers require --quiesce-managed-containers",
         "restoreSafety": "restore requires --confirm-restore and verifies all manifest checksums before mutation",
         "runtimeAcceptance": "fresh-VM login/projects/env/routes/deployments/persistent-data/DB-Studio checks remain external evidence",
+        "qualifyingSourcePreflight": "run source-preflight with the drill fixture spec before creating a qualifying beta backup",
+        "qualifyingManifestPreflight": "run validate-fixture-manifest after backup creation before any fresh-VM restore",
     }
     print(json.dumps(output, indent=2))
     return 0
@@ -605,6 +1014,21 @@ def build_parser() -> argparse.ArgumentParser:
     restore_parser.add_argument("--no-require-matching-git-sha", dest="require_matching_git_sha", action="store_false")
     restore_parser.add_argument("--confirm-restore", action="store_true")
     restore_parser.set_defaults(func=restore)
+
+    preflight_parser = sub.add_parser("source-preflight", help="verify qualifying beta restore fixtures before backup")
+    preflight_parser.add_argument("--spec", required=True, help="JSON file describing required source fixtures")
+    preflight_parser.add_argument("--install-dir", default=os.getenv("MYPAAS_INSTALL_DIR", DEFAULT_INSTALL_DIR))
+    preflight_parser.add_argument("--env-file", default="")
+    preflight_parser.add_argument("--static-root", default=DEFAULT_STATIC_ROOT)
+    preflight_parser.add_argument("--compose-root", default=DEFAULT_COMPOSE_ROOT)
+    preflight_parser.add_argument("--report", default="")
+    preflight_parser.set_defaults(func=preflight_source_fixtures)
+
+    manifest_parser = sub.add_parser("validate-fixture-manifest", help="verify backup manifest covers the qualifying fixture set")
+    manifest_parser.add_argument("--bundle", required=True)
+    manifest_parser.add_argument("--spec", required=True, help="same JSON fixture spec used for source-preflight")
+    manifest_parser.add_argument("--report", default="")
+    manifest_parser.set_defaults(func=validate_fixture_manifest)
 
     plan_parser = sub.add_parser("plan", help="show the backup/restore contract without touching the host")
     plan_parser.set_defaults(func=plan)
