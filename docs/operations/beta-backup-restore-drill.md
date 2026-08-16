@@ -17,6 +17,35 @@ The manifest records paths, sizes, checksums, counts, and the source Git SHA. It
 
 ## Source VM: create a consistent bundle
 
+Before a qualifying beta backup, prepare a complete recovery fixture set on the
+source VM and prove it is healthy. A drill that starts from missing, unhealthy,
+or non-persistent fixtures is not qualifying restore evidence.
+
+The required source fixtures are:
+
+- a static project with known sentinel content and a healthy route;
+- a container or registry-backed project with a known correct container port and
+  a healthy route;
+- a persistent runtime volume with a known sentinel file or value;
+- a Compose app with a supported PostgreSQL, MySQL, or MariaDB service, a healthy
+  app route, and a known database sentinel row;
+- DB Studio connectivity to the Compose database in read-only mode;
+- an encrypted project environment sentinel verified through the normal API
+  without recording plaintext.
+
+Write those fixture identifiers and expected sentinel checks to a private JSON
+fixture spec. The spec must not contain plaintext secrets. Then run:
+
+```bash
+sudo python3 scripts/backup-restore.py source-preflight \
+  --install-dir /opt/mypaas \
+  --spec /secure/path/phase2-fixtures.json \
+  --report /secure/path/source-preflight.json
+```
+
+Any preflight failure is a failed drill setup. Fix the fixture state before
+creating the backup; do not create a qualifying bundle from an unhealthy source.
+
 Inspect the plan first:
 
 ```bash
@@ -40,6 +69,21 @@ sudo python3 scripts/backup-restore.py verify --bundle /var/lib/mypaas/backups/f
 ```
 
 A checksum failure is a failed drill. Do not continue with a damaged bundle.
+
+For a qualifying beta drill, also validate the manifest against the same fixture
+spec before transferring it to the target VM:
+
+```bash
+sudo python3 scripts/backup-restore.py validate-fixture-manifest \
+  --bundle /var/lib/mypaas/backups/full-... \
+  --spec /secure/path/phase2-fixtures.json \
+  --report /secure/path/manifest-preflight.json
+```
+
+The manifest validation must show non-empty static and Compose archive coverage
+and at least one captured persistent volume sentinel. `managedVolumeCount = 0`
+is not qualifying Phase 2 evidence unless another documented volume-capture
+mechanism is added and the fixture manifest validator explicitly covers it.
 
 ## Fresh target VM preparation
 
