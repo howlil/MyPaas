@@ -38,12 +38,18 @@ func (s *Service) Allocate(ctx context.Context, projectID uuid.UUID) (int32, err
 	defer tx.Rollback(ctx)
 
 	queries := db.New(tx)
+	project, err := queries.GetProjectByID(ctx, projectID)
+	if err != nil {
+		return 0, fmt.Errorf("lookup project for port allocation: %w", err)
+	}
 
 	// A failed runtime cleanup can intentionally retain the registry ownership
-	// of a still-bound port. Reuse that ownership for the same project instead
-	// of leaking another port or making a retry collide with its own runtime.
+	// of a still-bound port after projects.allocated_port has been cleared. Reuse
+	// that ownership for recovery. When the project still has an active port,
+	// allocation is for a side-by-side replacement and must claim a distinct
+	// port so the replacement can start before the old runtime is removed.
 	if existing, lookupErr := queries.GetPortByProject(ctx, pgUUID(projectID)); lookupErr == nil {
-		if existing.Status == "in_use" {
+		if shouldReuseExistingPort(project.AllocatedPort, existing.Status) {
 			return existing.Port, nil
 		}
 	} else if !errors.Is(lookupErr, pgx.ErrNoRows) {
@@ -71,6 +77,10 @@ func (s *Service) Allocate(ctx context.Context, projectID uuid.UUID) (int32, err
 		return 0, fmt.Errorf("commit port allocation: %w", err)
 	}
 	return port, nil
+}
+
+func shouldReuseExistingPort(allocatedPort *int32, status string) bool {
+	return allocatedPort == nil && status == "in_use"
 }
 
 func (s *Service) Release(ctx context.Context, projectID uuid.UUID) error {

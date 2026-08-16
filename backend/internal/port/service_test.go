@@ -7,6 +7,43 @@ import (
 	"testing"
 )
 
+func TestShouldReuseExistingPortDistinguishesRecoveryFromReplacement(t *testing.T) {
+	activePort := int32(3001)
+	tests := []struct {
+		name          string
+		allocatedPort *int32
+		status        string
+		want          bool
+	}{
+		{
+			name:          "recovery reuses retained in-use port when project allocation was cleared",
+			allocatedPort: nil,
+			status:        "in_use",
+			want:          true,
+		},
+		{
+			name:          "redeploy allocates a distinct port while project has an active port",
+			allocatedPort: &activePort,
+			status:        "in_use",
+			want:          false,
+		},
+		{
+			name:          "non in-use registry row is never reused",
+			allocatedPort: nil,
+			status:        "available",
+			want:          false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldReuseExistingPort(tt.allocatedPort, tt.status); got != tt.want {
+				t.Fatalf("shouldReuseExistingPort() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCanBindUsesDockerPortBindingsForNonLocalBindHost(t *testing.T) {
 	t.Setenv("DOCKER_BIND_HOST", "172.18.0.1")
 	original := dockerPortBindings
