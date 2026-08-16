@@ -758,10 +758,14 @@ def recreate_api_if_present(install_dir: pathlib.Path, env_file: pathlib.Path, c
         "--env-file",
         str(env_file),
         "ps",
+        "--all",
         "-q",
         "api",
     ], check=False)
-    if completed.returncode != 0 or not completed.stdout.decode().strip():
+    if completed.returncode != 0:
+        message = completed.stderr.decode("utf-8", errors="replace").strip()
+        raise BackupRestoreError(f"cannot inspect API service before restore reconciliation: {message[:1000]}")
+    if not completed.stdout.decode().strip():
         return False
     run([
         "docker",

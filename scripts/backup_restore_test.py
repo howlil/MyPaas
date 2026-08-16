@@ -407,7 +407,7 @@ class BackupRestoreTest(unittest.TestCase):
 
         def fake_run(args, **kwargs):
             calls.append(args)
-            if args[-2:] == ["-q", "api"]:
+            if args[-3:] == ["--all", "-q", "api"]:
                 return subprocess.CompletedProcess(args=args, returncode=0, stdout=b"mypaas-api\n", stderr=b"")
             return subprocess.CompletedProcess(args=args, returncode=0, stdout=b"", stderr=b"")
 
@@ -416,9 +416,44 @@ class BackupRestoreTest(unittest.TestCase):
 
         self.assertTrue(recreated)
         self.assertIn(
+            ["docker", "compose", "-f", "docker-compose.prod.yml", "--env-file", ".env", "ps", "--all", "-q", "api"],
+            calls,
+        )
+        self.assertIn(
             ["docker", "compose", "-f", "docker-compose.prod.yml", "--env-file", ".env", "up", "-d", "--force-recreate", "api"],
             calls,
         )
+
+    def test_recreate_api_if_present_detects_stopped_api_container(self):
+        calls = []
+
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            if args[-3:] == ["--all", "-q", "api"]:
+                return subprocess.CompletedProcess(args=args, returncode=0, stdout=b"stopped-api-container\n", stderr=b"")
+            return subprocess.CompletedProcess(args=args, returncode=0, stdout=b"", stderr=b"")
+
+        with mock.patch.object(backup_restore, "run", side_effect=fake_run):
+            self.assertTrue(backup_restore.recreate_api_if_present(pathlib.Path("/opt/mypaas"), pathlib.Path(".env"), pathlib.Path("docker-compose.prod.yml")))
+
+        self.assertIn(
+            ["docker", "compose", "-f", "docker-compose.prod.yml", "--env-file", ".env", "ps", "--all", "-q", "api"],
+            calls,
+        )
+        self.assertIn(
+            ["docker", "compose", "-f", "docker-compose.prod.yml", "--env-file", ".env", "up", "-d", "--force-recreate", "api"],
+            calls,
+        )
+
+    def test_recreate_api_if_present_raises_when_compose_ps_fails(self):
+        def fake_run(args, **kwargs):
+            if args[-3:] == ["--all", "-q", "api"]:
+                return subprocess.CompletedProcess(args=args, returncode=1, stdout=b"", stderr=b"compose config error")
+            self.fail("force recreate should not run after failed compose ps inspection")
+
+        with mock.patch.object(backup_restore, "run", side_effect=fake_run):
+            with self.assertRaises(backup_restore.BackupRestoreError):
+                backup_restore.recreate_api_if_present(pathlib.Path("/opt/mypaas"), pathlib.Path(".env"), pathlib.Path("docker-compose.prod.yml"))
 
 
 if __name__ == "__main__":
