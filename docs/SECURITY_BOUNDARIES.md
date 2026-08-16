@@ -3,9 +3,11 @@
 > Current trust model for the single-host production architecture.
 
 **Status:** Current  
-**Applies to:** `main`  
-**Last verified:** 2026-08-13  
-**Verified against commit:** `8769f0bb5373e8ec8ca584d6e2cbbf6fb5820cbf`
+**Applies to:** `main` and the `v0.5.0-beta.1` release line  
+**Last verified:** 2026-08-16  
+**Verified against runtime candidate:** `ddc26c9a0f877fc5dd4133d6559c5f36123d6a31`
+
+Later documentation-only release commits do not change the runtime trust model described here.
 
 ---
 
@@ -204,6 +206,12 @@ The following properties are part of the current production contract:
 - route resolution fails closed;
 - statd does not require mounting host cgroups into the API container;
 - engine authority remains explicitly documented as host authority.
+
+## Beta qualification boundary
+
+The beta release qualification validates the documented control-plane/runtime behavior and secret-safe evidence handling for the tested release lineage. It does **not** change the trust assumptions above or establish VM-grade tenant isolation.
+
+See `docs/engineering/beta-readiness-gates.md` for qualification provenance and `docs/releases/v0.5.0-beta.1.md` for release limitations.
 
 ## Related documents
 
