@@ -38,7 +38,7 @@ func (s *Service) ReconcileMissingRuntimes(ctx context.Context) error {
 			slog.Error("reconciler: failed to create recovery deployment", "project", project.Name, "error", err)
 			continue
 		}
-		go s.runDeployment(project.ID, deployment.ID)
+		go s.runRecoveryDeployment(project.ID, deployment.ID)
 	}
 	return nil
 }
