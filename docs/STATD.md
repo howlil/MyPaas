@@ -3,10 +3,12 @@
 > Host-native runtime and host telemetry integration for MyPaaS.
 
 **Status:** Current  
-**Applies to:** `main`  
-**Last verified:** 2026-08-13  
-**Verified against commit:** `8769f0bb5373e8ec8ca584d6e2cbbf6fb5820cbf`  
+**Applies to:** `main` and the `v0.5.0-beta.1` release line  
+**Last verified:** 2026-08-16  
+**Verified against MyPaaS runtime candidate:** `ddc26c9a0f877fc5dd4133d6559c5f36123d6a31`  
 **Current production statd release:** `v0.2.0`
+
+The `v0.2.0` statd release remains the installer default for this beta line. Later MyPaaS documentation-only commits do not change the integration contract described here.
 
 ---
 
