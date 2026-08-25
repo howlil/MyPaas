@@ -5,7 +5,7 @@ This suite measures whether MyPaaS can correctly host representative real-world 
 ## Rules
 
 - A `PASS` means the application deployed and its declared smoke checks succeeded on the tested MyPaaS host.
-- A failure must be classified as a MyPaaS defect, an upstream application/configuration problem, a host-resource limit, or an intentional platform boundary.
+- A failure must be classified as a MyPaaS defect, an upstream application/configuration problem, a host-resource limit, or an intentional platform boundary before it becomes accepted evidence.
 - Do not convert a passing fixture into an RPS, concurrent-user, project-count, or hardware-capacity claim.
 - Prefer upstream Docker/Compose deployment patterns and public OCI images. Compatibility manifests may only adapt host-specific details such as bind mounts, platform-owned routing, and secrets; they must not patch application code.
 - Run heavy workloads separately on modest hosts. Resource exhaustion is not automatically a MyPaaS defect.
@@ -35,6 +35,7 @@ The machine-readable source of truth is [`catalog.json`](catalog.json).
 
 - `untested` — catalogued but not yet run on the target MyPaaS host.
 - `pass` — deployment and declared checks completed successfully.
+- `fail-unclassified` — automated run failed; human/evidence triage is still required.
 - `fail-platform` — reproducible MyPaaS defect.
 - `fail-app` — upstream application/configuration problem unrelated to MyPaaS.
 - `fail-resource` — host CPU/RAM/disk capacity was the limiting factor.
