@@ -1,293 +1,83 @@
 # mypaas-statd Integration
 
-> Host-native runtime and host telemetry integration for MyPaaS.
+`mypaas-statd` is an optional Linux-native telemetry daemon used by MyPaaS for runtime and host metrics.
 
-**Status:** Current  
-**Applies to:** `main` and the `v0.5.0-beta.1` release line  
-**Last verified:** 2026-08-16  
-**Verified against MyPaaS runtime candidate:** `ddc26c9a0f877fc5dd4133d6559c5f36123d6a31`  
-**Current production statd release:** `v0.2.0`
-
-The `v0.2.0` statd release remains the installer default for this beta line. Later MyPaaS documentation-only commits do not change the integration contract described here.
-
----
-
-## Role in the architecture
-
-`mypaas-statd` is the preferred runtime metrics path for live Dockerfile and Compose projects when `STATD_SOCKET` is configured. Since v0.2.0 it also provides optional host CPU, memory, storage, and network telemetry for the admin host-stats view.
-
-It is intentionally a **host-native systemd daemon**:
+## Role
 
 ```mermaid
 flowchart LR
-    API["MyPaaS API container"] --> Socket["/run/mypaas/statd.sock"]
-    Socket --> Statd["mypaas-statd\nsystemd daemon"]
+    API["MyPaaS API"] --> Socket["/run/mypaas/statd.sock"]
+    Socket --> Statd["mypaas-statd"]
     Statd --> Proc["host /proc"]
     Statd --> Cgroup["host cgroup v2"]
-    Statd --> FS["host filesystem / network counters"]
 ```
 
-The API receives the Unix socket but does not mount host `/proc` or `/sys/fs/cgroup`. statd is not a control-plane container and is not distributed as a required GHCR sidecar.
+The daemon runs under systemd on the host. The API communicates with it through a Unix socket instead of mounting host `/proc` or `/sys/fs/cgroup` into the API container.
 
-## Production installation
+`mypaas-statd` is optional. Runtime metrics fall back to the Docker-compatible engine path when statd is disabled, unavailable, or unusable for a runtime.
 
-Production installation is pinned to a release, not mutable `main`.
+## Installation
 
-Current installer defaults:
+Production installation uses a versioned release artifact and checksum. Source installation remains available explicitly for development, forks, or unsupported prebuilt architectures.
+
+Typical settings:
 
 ```text
 STATD_INSTALL_MODE=release
-STATD_VERSION=v0.2.0
+STATD_VERSION=<supported-release>
 STATD_RELEASE_BASE_URL=https://github.com/nabilrn/mypaas-statd/releases/download
 STATD_SOCKET=/run/mypaas/statd.sock
 ```
 
-The published v0.2.0 release provides:
+Set `INSTALL_STATD=false` to skip statd.
 
-```text
-mypaas-statd-linux-amd64.tar.gz
-SHA256SUMS
-```
+## Protocol
 
-The installer downloads the artifact and checksum file, requires an exact checksum entry, verifies it with `sha256sum -c`, extracts the release, verifies the bundled version, installs the binary/systemd unit, enables the service, and waits for `/run/mypaas/statd.sock`.
-
-Set:
-
-```text
-INSTALL_STATD=false
-```
-
-to skip statd and keep the Docker-compatible runtime metrics path only.
-
-### Explicit source mode
-
-Source installation remains available for development, forks, and unsupported prebuilt architectures:
-
-```text
-STATD_INSTALL_MODE=source
-STATD_REPO_URL=https://github.com/nabilrn/mypaas-statd.git
-STATD_REF=<branch-tag-or-commit>
-STATD_DIR=/opt/mypaas-statd
-```
-
-Source mode is explicit. It is not the default production distribution model.
-
-## Compatibility contract
-
-The MyPaaS client currently negotiates **protocol 1** on each Unix connection.
-
-| statd release | Protocol | Runtime snapshots | Host snapshot | Production status |
-| --- | --- | --- | --- | --- |
-| `v0.1.0` | 1 | Yes | No | Historical/upgrade compatibility |
-| `v0.2.0` | 1 | Yes | Yes | Current installer default |
-
-`host_snapshot` is additive within protocol 1. Runtime snapshot compatibility therefore remains stable across v0.1 and v0.2, while host telemetry is available only from a daemon that implements the new operation.
-
-The MyPaaS client has a bounded exchange timeout and rejects protocol mismatches instead of interpreting incompatible payloads.
-
-## Runtime metrics flow
-
-```mermaid
-sequenceDiagram
-    actor Client as Dashboard / REST / SSE
-    participant API as MyPaaS API
-    participant Engine as Docker-compatible engine
-    participant Statd as mypaas-statd
-    participant Cgroup as cgroup v2
-
-    Client->>API: Request runtime metrics
-
-    alt statd configured and runtime supported
-        API->>Engine: Discover runtime identity when cache is cold/stale
-        Engine-->>API: PID + service + StartedAt
-        API->>API: Store bounded runtime metadata
-        API->>Statd: hello(protocol=1)
-        Statd-->>API: protocol=1
-        API->>Statd: register runtime ID + host PID when needed
-        API->>Statd: snapshot runtime ID
-        Statd->>Cgroup: Read runtime cgroup counters
-        Cgroup-->>Statd: CPU / memory / PID counters
-        Statd-->>API: Snapshot
-        API-->>Client: Runtime metrics
-    else statd disabled/unavailable/static/unusable
-        API->>Engine: Docker-compatible metrics fallback
-        Engine-->>API: Runtime metrics
-        API-->>Client: Runtime metrics
-    end
-```
-
-Runtime IDs use:
+The current client uses protocol 1 over the Unix socket. Runtime identifiers use:
 
 ```text
 <project-uuid>:<service-name>
 ```
 
-Example:
+The client uses bounded exchange timeouts and rejects incompatible protocol responses.
 
-```text
-784283cd-0b53-42eb-bd9a-e1c729e86f41:app
-```
+## Runtime metrics
 
-The steady-state path avoids repeated Docker/Podman process-discovery spawns. A cached runtime identity is invalidated and rediscovered when it becomes unusable.
+Runtime snapshots expose cgroup-derived CPU, memory, and PID information together with validity/staleness state. The protocol does not currently expose a sampler timestamp, so the UI and documentation must not invent metric-age guarantees.
 
-### Project SSE fan-out
+MyPaaS keeps bounded runtime identity metadata so steady-state metrics collection does not require repeated process discovery. Stale or invalid runtime identity is rediscovered when needed.
 
-`mypaas-statd` remains a snapshot source, not a browser-facing stream. MyPaaS samples through one shared per-project metrics hub and fans the resulting snapshot out to subscribed Project Detail clients over SSE. Multiple browser subscribers therefore do not multiply statd/Docker sampling loops. Cloudflare traffic analytics stay on a separate slow REST path.
+Project Detail metrics are sampled through a shared per-project hub and fanned out to subscribers over SSE. Browser subscriber count therefore does not directly multiply runtime sampling loops.
 
-```mermaid
-flowchart LR
-    Statd["mypaas-statd snapshot"] --> Hub["MyPaaS project metrics hub"]
-    Fallback["Docker-compatible fallback"] --> Hub
-    Hub --> SSE["Shared project SSE"]
-    SSE --> A["Project Detail A"]
-    SSE --> B["Project Detail B"]
-```
+## Host telemetry
 
-## Runtime snapshot model
+Supported statd releases can also expose host CPU, memory, storage, and network counters to the admin host-stats view. Host sections are optional.
 
-Protocol 1 runtime snapshots expose:
+The API preserves configured capacity/allocation information when host telemetry is unavailable; it does not fabricate host filesystem or network information from the API container namespace.
 
-- CPU usage counter and optional computed percentage/quota data;
-- current/max memory plus OOM/OOM-kill counters;
-- current/max PID counters;
-- snapshot validity/staleness flags.
+Network values exposed by the daemon are cumulative counters. Rate charts must derive rates from successive successful snapshots and elapsed time.
 
-Protocol 1 runtime snapshots do not expose a sampler timestamp. Documentation and UI must not claim metric age/freshness that the protocol does not provide.
-
-## Host telemetry flow
-
-v0.2.0 adds `host_snapshot`.
-
-```mermaid
-sequenceDiagram
-    participant UI as Admin dashboard
-    participant API as MyPaaS API
-    participant Statd as mypaas-statd v0.2
-    participant Host as Linux host
-
-    UI->>API: GET /admin/host-stats
-    API->>API: Read host capacity + allocated resources
-    API->>Statd: hello(protocol=1)
-    Statd-->>API: protocol=1
-    API->>Statd: host_snapshot
-    Statd->>Host: Read host telemetry
-    Host-->>Statd: CPU / memory / storage / network
-    Statd-->>API: Optional host snapshot sections
-    API-->>UI: Capacity + allocation + telemetry status/data
-```
-
-Current host snapshot structures include:
-
-```text
-memory.total_bytes
-memory.available_bytes
-cpu.total_ticks
-cpu.idle_ticks
-storage.total_bytes
-storage.available_bytes
-network.interface
-network.rx_bytes
-network.tx_bytes
-```
-
-Network values are cumulative counters, not bytes-per-second. Rate charts must derive rates from successive successful snapshots and elapsed time.
-
-Host sections are nullable. The API still returns capacity/allocation fields when telemetry is disabled or unavailable.
-
-Current diagnostic states:
-
-```text
-telemetry_status = disabled | unavailable | available
-telemetry_error_code = <optional stable category>
-```
-
-The API intentionally does not read host storage/network data from its own container namespace as a fallback.
-
-## Failure and fallback behavior
+## Failure behavior
 
 ```mermaid
 flowchart TB
     Request["Metrics request"] --> Kind{"Runtime or host?"}
-
     Kind -->|runtime| RuntimeStatd{"Usable statd snapshot?"}
-    RuntimeStatd -->|yes| ReturnRuntime["Return statd runtime metrics"]
-    RuntimeStatd -->|no| Docker["Docker-compatible fallback"]
-    Docker --> ReturnRuntime
-
-    Kind -->|host| HostStatd{"host_snapshot available?"}
+    RuntimeStatd -->|yes| ReturnRuntime["Return statd metrics"]
+    RuntimeStatd -->|no| Engine["Docker-compatible fallback"]
+    Engine --> ReturnRuntime
+    Kind -->|host| HostStatd{"Host snapshot available?"}
     HostStatd -->|yes| ReturnHost["Return capacity + telemetry"]
-    HostStatd -->|no| Capacity["Return capacity/allocation + diagnostic status"]
+    HostStatd -->|no| Capacity["Return capacity + diagnostic state"]
 ```
 
-Runtime statd failure is non-fatal because a Docker-compatible fallback exists. Host telemetry is different: MyPaaS preserves capacity/allocation but does not fabricate host telemetry from the API container.
+Runtime statd failure is non-fatal because the engine fallback remains available. Host telemetry failure returns a diagnostic state rather than invented values.
 
-## Operational visibility
+Prometheus-compatible signals include statd availability, fallback count, snapshot errors, and registration errors.
 
-Runtime statd availability/fallback is exposed through low-cardinality Prometheus metrics:
+## Performance measurement
 
-```text
-mypaas_statd_available
-mypaas_statd_fallback_total
-mypaas_statd_snapshot_errors_total
-mypaas_statd_registration_errors_total
-```
-
-Logging for runtime fallback is transition-aware:
-
-- first unavailable state or healthy → unavailable transition: warning;
-- repeated fallback while already unavailable: debug;
-- unavailable → healthy recovery: info.
-
-When `STATD_SOCKET` is configured, `scripts/verify-production.sh` also requires the host systemd service to be active, the Unix socket to exist, and the API container to see the mounted socket.
-
-## Historical benchmark evidence
-
-The accepted Phase 4 real-host runtime benchmark evidence remains in the `nabilrn/mypaas-statd` repository:
-
-```text
-benchmarks/results/phase4-debian13-podman-2026-08-10/
-```
-
-Tested statd commit:
-
-```text
-cf8843545ea19ecf9a54049e21b2fe609e49d58d
-```
-
-Environment:
-
-- Debian GNU/Linux 13;
-- kernel `6.12.88+deb13-amd64`;
-- rootful Podman 5.4.2;
-- `/var/run/docker.sock` backed by Podman;
-- 50 warmup samples;
-- 500 recorded iterations per trial;
-- three trials.
-
-Recorded runtime-path results:
-
-| Trial | Path | p50 ms | p95 ms | p99 ms | Process spawns |
-| --- | --- | ---: | ---: | ---: | ---: |
-| 1 | Docker-compatible CLI | 41.0394 | 51.9852 | 57.2799 | 500 |
-| 1 | statd | 0.7803 | 0.8813 | 1.0528 | 0 |
-| 2 | Docker-compatible CLI | 41.5558 | 53.6186 | 64.3199 | 500 |
-| 2 | statd | 0.7969 | 1.0065 | 1.1074 | 0 |
-| 3 | Docker-compatible CLI | 43.2664 | 55.9937 | 64.0453 | 500 |
-| 3 | statd | 0.8202 | 1.0882 | 1.2006 | 0 |
-
-Correctness checks compared statd snapshots with raw cgroup v2 files for memory, PID, and CPU counter semantics. Runtime disappearance was also exercised and returned `NOT_FOUND` while the daemon remained active.
-
-These results are historical evidence for the runtime snapshot path. They are not a fresh benchmark of v0.2.0 host telemetry and should not be generalized to every machine.
-
-## Release model
-
-The supported distribution order remains:
-
-1. versioned GitHub Release artifact + `SHA256SUMS` for production;
-2. explicit source installation for development/forks/unsupported prebuilt architectures;
-3. additional OS packaging only if operational maturity justifies it.
-
-MyPaaS API/dashboard remain container images. statd remains a host tool consumed through `STATD_SOCKET`.
+The `mypaas-statd` repository contains local tooling for comparing implementation paths. Generated benchmark output is engineering evidence for a specific run only. It is not a MyPaaS application-capacity claim and is intentionally not reproduced in this product documentation.
 
 ## Related documents
 
