@@ -1,6 +1,0 @@
-OS=Microsoft Windows NT 10.0.26200.0
-MachineName=DESKTOP-P9BFQ4H
-ProcessorCount=8
-PROCESSOR_IDENTIFIER=Intel64 Family 6 Model 140 Stepping 1, GenuineIntel
-LogicalDrives=C:\
-Drive C:\ Total=511029800960 Free=162997026816

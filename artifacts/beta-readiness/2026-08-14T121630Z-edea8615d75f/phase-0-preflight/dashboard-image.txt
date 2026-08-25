@@ -1,3 +1,0 @@
-COMMAND: sh -c docker inspect mypaas-dashboard --format '{{.Image}} {{.Config.Image}} {{.State.Status}}'
---- OUTPUT ---
-sha256:a9612b61aa1261e70c75aad73fb18609d28be635005be06efc3a9d3a719a9c5d ghcr.io/nabilrn/mypaas-dashboard:b94361be993963c0ad04a5c3a76130bc8d8ef8ee running

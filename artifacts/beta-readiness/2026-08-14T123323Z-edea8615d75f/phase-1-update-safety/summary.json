@@ -1,9 +1,0 @@
-{
-  "gateState": "FAIL",
-  "candidateSha": "edea8615d75f8e032bfb66bf430ab598b05876b2",
-  "successfulUpdate": "PASS",
-  "missingImageSafety": "PASS",
-  "initialUpdaterRollback": "FAIL",
-  "candidateLocalRollbackPath": "PARTIAL",
-  "rootCause": "The initial VM updater from b94361be993963c0ad04a5c3a76130bc8d8ef8ee pulls rollback-* tags from GHCR during failed-update rollback; candidate fixes do not affect the already-running old updater process."
-}

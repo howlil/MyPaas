@@ -1,1 +1,0 @@
-{"gateState":"FAIL","candidateSha":"edea8615d75f8e032bfb66bf430ab598b05876b2","rootCause":"beta_perf.py sends the exact SHA fixture ref as branch; API rejects it as an unclonable branch.","evidence":["report.json","report.md","../phase-3-performance-command.txt"]}

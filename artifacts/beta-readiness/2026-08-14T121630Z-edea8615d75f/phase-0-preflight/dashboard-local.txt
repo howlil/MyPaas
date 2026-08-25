@@ -1,8 +1,0 @@
-COMMAND: curl -I -fsS http://127.0.0.1:3000/
---- OUTPUT ---
-HTTP/1.1 307 Temporary Redirect
-location: /projects
-Date: Fri, 14 Aug 2026 12:18:14 GMT
-Connection: keep-alive
-Keep-Alive: timeout=5
-

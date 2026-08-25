@@ -1,3 +1,0 @@
-COMMAND: Get-CimInstance Win32_Processor | Select-Object Name,NumberOfCores,NumberOfLogicalProcessors
---- OUTPUT ---
-

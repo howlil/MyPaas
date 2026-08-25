@@ -1,4 +1,0 @@
-COMMAND: docker --version
---- OUTPUT ---
-Docker version 28.5.2, build ecc6942
-

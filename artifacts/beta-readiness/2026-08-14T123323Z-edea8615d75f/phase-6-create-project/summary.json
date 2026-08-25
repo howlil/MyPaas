@@ -1,1 +1,0 @@
-{"gateState":"BLOCKED_ON_VM_EVIDENCE","candidateSha":"edea8615d75f8e032bfb66bf430ab598b05876b2","blockedReason":"Authenticated production Playwright audit prerequisites were incomplete: VM lacks Node/Playwright and controlled source inputs for all required runtime classes were not available."}

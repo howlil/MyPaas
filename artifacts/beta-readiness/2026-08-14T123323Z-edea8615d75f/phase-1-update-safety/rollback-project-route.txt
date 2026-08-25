@@ -1,1 +1,0 @@
-{"candidates": ["mypaas-sample-crud-db", "sop-generate-app", "portfolio", "ez-agent-landingpage", "lib-unand-dashboard", "cikiwir", "porsche-gallery", "network-rookie", "ambatest", "sumbar-smart-portal"], "verified": "mypaas-sample-crud-db.nabilrn.space", "httpCode": "200"}

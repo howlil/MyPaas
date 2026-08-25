@@ -1,3 +1,0 @@
-COMMAND: docker builder du
---- OUTPUT ---
-

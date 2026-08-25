@@ -1,3 +1,0 @@
-COMMAND: Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize,FreePhysicalMemory
---- OUTPUT ---
-

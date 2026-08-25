@@ -1,6 +1,0 @@
-{
-  "phase": "phase-1-update-safety",
-  "scenario": "rollback-drill",
-  "status": "BLOCKED_ON_VM_EVIDENCE",
-  "blockedReason": "Candidate release images are unavailable, so update-vm.sh cannot advance past target image selection/deployment for rollback injection."
-}

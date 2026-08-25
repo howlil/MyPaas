@@ -1,4 +1,0 @@
-dry_run_exit=0
-apply_exit=0
-lock_exit=1
-verify_exit=0

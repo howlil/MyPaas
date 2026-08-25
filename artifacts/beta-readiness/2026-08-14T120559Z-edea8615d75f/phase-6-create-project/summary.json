@@ -1,7 +1,0 @@
-{
-  "phase": "phase-6-create-project",
-  "status": "BLOCKED_ON_VM_EVIDENCE",
-  "testedCandidateSha": "edea8615d75f8e032bfb66bf430ab598b05876b2",
-  "blockedReason": "No authenticated controlled MyPaaS installation or production base URL was available.",
-  "defectsDiscovered": []
-}

@@ -1,4 +1,0 @@
-COMMAND: git branch --show-current
---- OUTPUT ---
-test/beta-readiness-candidate
-

@@ -1,2 +1,0 @@
-artifacts/beta-readiness/2026-08-14T123323Z-edea8615d75f/phase-3-performance
-exit_code=1

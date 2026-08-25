@@ -1,3 +1,0 @@
-COMMAND: docker manifest inspect ghcr.io/nabilrn/mypaas-api:edea8615d75f8e032bfb66bf430ab598b05876b2
---- OUTPUT ---
-manifest unknown

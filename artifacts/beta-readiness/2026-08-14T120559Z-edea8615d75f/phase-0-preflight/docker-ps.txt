@@ -1,3 +1,0 @@
-COMMAND: docker ps --no-trunc
---- OUTPUT ---
-
