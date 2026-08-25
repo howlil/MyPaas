@@ -1,13 +1,14 @@
 import importlib.util
 import json
 import pathlib
-import tempfile
+import sys
 import unittest
 
 MODULE_PATH = pathlib.Path(__file__).with_name("run.py")
 spec = importlib.util.spec_from_file_location("compatibility_run", MODULE_PATH)
 runner = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
+sys.modules[spec.name] = runner
 spec.loader.exec_module(runner)
 
 
