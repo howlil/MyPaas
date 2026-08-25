@@ -1,93 +1,53 @@
 # Product
 
-## Release status
+MyPaaS is a **single-host self-hosted deployment platform** for an owner developer or a small trusted team.
 
-MyPaas is currently a **beta single-host self-hosted PaaS**.
+Its job is to make common deployment and operations work repeatable on a Linux server without hiding ownership of the host, container engine, data, or routing path.
 
-The beta is intended for an owner developer or a small trusted team that wants a repeatable deployment control plane on a Linux VM without giving up ownership of the host, container engine, persistent data, and routing path.
+## Current scope
 
-The release has completed the mandatory beta-readiness gates recorded in `docs/engineering/beta-readiness-gates.md`. That qualification is evidence for the tested release lineage, not a promise of hyperscaler-grade availability or arbitrary workload capacity.
+MyPaaS can:
 
-## Target users
+- deploy Git repositories with Dockerfile, Docker Compose, or static output;
+- deploy public OCI images;
+- inspect repository structure and configuration before creation;
+- manage environment variables and project resource settings;
+- manage routing through Caddy;
+- expose deployment history, logs, metrics, and lifecycle actions;
+- support rollback for compatible container-backed deployments;
+- provide PostgreSQL provisioning, DB Studio Lite, backups, restore, and migration tooling;
+- expose CLI, REST API, webhooks, and an optional local MCP bridge;
+- use optional `mypaas-statd` telemetry with an engine-metrics fallback.
 
-MyPaas is designed for developers and small technical teams who routinely:
+Fresh supported Linux installations default to rootful Podman through the Docker-compatible command/socket contract used by the control plane. Docker Engine remains an explicit compatibility mode.
 
-- deploy Git repositories or public OCI images;
-- inspect build/deployment failures;
-- manage environment variables;
-- watch logs and runtime metrics;
-- roll back a bad container-backed deployment;
-- operate Compose applications with persistent data;
-- inspect supported project databases through DB Studio;
-- maintain a constrained self-hosted VM.
+## Boundaries
 
-## Product purpose
+MyPaaS currently does **not** provide:
 
-MyPaas makes self-hosted deployment feel closer to a managed PaaS while preserving infrastructure ownership.
+- multi-node scheduling or cluster orchestration;
+- control-plane high availability;
+- hostile multi-tenant isolation;
+- automatic horizontal application scaling;
+- private-registry credential management;
+- supported in-place Docker-to-Podman state migration;
+- a universal application-capacity guarantee.
 
-It connects Git repositories to Dockerfile, Docker Compose, or static deployments; supports public registry images; manages routing through Caddy and Cloudflare Tunnel; tracks deployment history; exposes logs and metrics; and keeps common lifecycle, backup, recovery, and database-inspection actions in one control plane.
-
-Success means a developer can deploy, diagnose, recover, and maintain a project without repeatedly rebuilding the same infrastructure glue.
-
-## Runtime policy
-
-MyPaas is **Podman-first on fresh supported Linux hosts**.
-
-The installer defaults to rootful Podman and exposes the Podman socket through the Docker-compatible command/socket contract consumed by the control plane. MyPaas therefore keeps one orchestration implementation while using Podman as the preferred fresh-host engine.
-
-Docker Engine remains a supported **explicit compatibility mode** for existing installations and operators that intentionally choose it with `USE_PODMAN=false`. This is compatibility support, not a second preferred default.
-
-`mypaas-statd` is a separate concern: it remains optional host/runtime telemetry because the platform has a Docker-compatible metrics fallback when statd is disabled or unavailable.
-
-## Current product boundaries
-
-The product deliberately does **not** claim to be:
-
-- a Kubernetes replacement;
-- a multi-node cluster scheduler;
-- a highly available control plane;
-- a hostile multi-tenant isolation boundary;
-- a managed public cloud service;
-- an unlimited-capacity deployment platform.
-
-Current boundaries include:
-
-- one Linux host per MyPaas installation;
-- owner / small trusted-team access model;
-- rootful Podman as the fresh-host default behind the Docker-compatible engine contract;
-- Docker Engine as an explicit supported compatibility mode;
-- public OCI registry deployment only; private registry credentials are outside the current implementation;
-- no supported in-place Docker-to-Podman state migration;
-- performance and project capacity depend on host resources and workload shape.
+Application and build capacity depend on the workload and on the CPU, memory, storage, network, database, and other processes sharing the host. Project count, concurrent users, RPS, or a particular VM size are not fixed capabilities of MyPaaS.
 
 ## Product principles
 
-1. **Deployment state first.** Current state, next action, and risk should be obvious before the user acts.
-2. **Honest automation.** Detected values must be distinguishable from fallbacks and manual configuration.
-3. **Fail closed.** Stale analysis, incomplete configuration, unhealthy replacements, and invalid recovery paths must not be presented as success.
-4. **Recovery is a first-class flow.** Retry, rollback, reconnect, restore, revoke, and cleanup states should be visible and trustworthy.
-5. **Single-host operational clarity.** Prefer simple, mature mechanisms that fit the current architecture over distributed-system complexity the product does not need.
-6. **Evidence before claims.** Performance, compatibility, and release-readiness claims should point back to tests or recorded qualification evidence.
+1. Keep deployment state and failure state explicit.
+2. Prefer deterministic configuration over guessed automation.
+3. Do not replace a healthy runtime with a failed deployment.
+4. Keep recovery, rollback, backup, and cleanup operable.
+5. Prefer simple single-host mechanisms over distributed-system complexity without a demonstrated need.
+6. Keep public claims narrower than what the implementation and current evidence support.
 
-## Brand personality
+## Security and operations
 
-Quiet, capable, and operationally precise.
+The MyPaaS API has privileged container-engine authority. The current trust model is therefore an owner or small trusted team, not mutually hostile tenants.
 
-The interface should feel modern and controlled rather than decorative: dense enough for repeated operational use, legible under pressure, and explicit about state. Avoid generic SaaS ornamentation that competes with deployment information.
+Host sizing, application architecture, provider availability, infrastructure security, and off-host recovery material remain operator responsibilities.
 
-## Anti-references
-
-Avoid:
-
-- oversized marketing-style composition inside the dashboard;
-- decorative gradients and glassmorphism used as primary structure;
-- nested card stacks without information hierarchy;
-- vague spinners that hide actionable state;
-- wizard steps that unnecessarily slow source configuration;
-- interfaces that imply ports, secrets, runtime type, or readiness are known when they are only inferred or stale.
-
-## Accessibility
-
-Target WCAG AA contrast for text and controls. Preserve keyboard access, visible focus, semantic controls, reduced-motion-safe interactions, and status copy that does not rely on color alone.
-
-Operational screens should remain usable on laptop and mobile viewports without clipping primary actions or hiding required configuration.
+See [`docs/SECURITY_BOUNDARIES.md`](docs/SECURITY_BOUNDARIES.md) for the detailed trust model.
