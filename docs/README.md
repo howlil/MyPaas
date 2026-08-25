@@ -11,6 +11,7 @@ Technical documentation for the current single-host MyPaaS beta.
 | [Architecture](ARCHITECTURE.md) | System architecture |
 | [Architecture overview](architecture/overview.md) | Control-plane components and request paths |
 | [Deployment architecture](architecture/deployment.md) | Dockerfile, Compose, static, and OCI image deployment |
+| [Real-world compatibility](../compatibility/CATALOG.md) | OSS workload classes, manifests, and compatibility result rules |
 | [Networking](architecture/networking.md) | Routing and trust boundaries |
 | [Observability](architecture/observability.md) | Logs and metrics |
 | [Security boundaries](SECURITY_BOUNDARIES.md) | Security model |
@@ -38,6 +39,7 @@ When documentation disagrees, use this order:
 - Do not claim multi-node HA, Kubernetes-style scheduling, or hostile multi-tenant isolation.
 - Do not turn a test fixture count, VM shape, RPS result, or concurrent-user run into a product-capacity promise.
 - Application capacity depends on the application and on available CPU, memory, storage, network, database behavior, and build requirements.
+- A compatibility PASS only means the declared deployment and smoke checks succeeded for that application on the tested host.
 - Generated test artifacts belong outside the source tree unless a specific review requires them.
 - Roadmap and experiment documents are not current product behavior.
 
